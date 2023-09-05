@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use record patterns" #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-overlapping-patterns #-}
 {-|
 Module      : PPrint
 Description : Pretty printer para FD4.
@@ -134,7 +136,13 @@ t2doc at (SLam _ (v,ty) t) =
            , binding2doc (v,ty)
            , opColor(pretty "->")]
       , nest 2 (t2doc False t)]
-
+t2doc at (SSugarLam _ bs t) =
+  parenIf at $
+  sep [sep [ keywordColor (pretty "fun")
+           , bindings2doc bs
+           , opColor(pretty "->")]
+      , nest 2 (t2doc False t)] -- por aca no pasa porque antes se hace openAll que transforma concatenaciones de Lam en
+                                -- concatenaciones de SLam (REVISAR openAll)
 t2doc at t@(SApp _ _ _) =
   let (h, ts) = collectApp t in
   parenIf at $
@@ -168,6 +176,19 @@ t2doc at (SLet _ (v,ty) t t') =
   , keywordColor (pretty "in")
   , nest 2 (t2doc False t') ]
 
+t2doc at (SFunLet _ (v,ty) bs t t') =
+  parenIf at $
+  sep [
+    sep [keywordColor (pretty "let")
+       , pretty v
+       , parens (bindings2doc bs)
+       , pretty ":"
+       , ty2doc ty
+       , opColor (pretty "=") ]
+  , nest 2 (t2doc False t)
+  , keywordColor (pretty "in")
+  , nest 2 (t2doc False t') ]
+
 t2doc at (SBinaryOp _ o a b) =
   parenIf at $
   t2doc True a <+> binary2doc o <+> t2doc True b
@@ -195,5 +216,8 @@ ppDecl (Decl p x t) = do
                        , name2doc x 
                        , defColor (pretty "=")] 
                    <+> nest 2 (t2doc False (openAll fst (map declName gdecl) t)))
-                         
+
+-- 
+bindings2doc :: [(Name, Ty)] -> Doc AnsiStyle
+bindings2doc (b:bs) = binding2doc b <+> bindings2doc bs
 

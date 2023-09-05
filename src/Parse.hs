@@ -43,7 +43,7 @@ langDef = emptyDef {
 whiteSpace :: P ()
 whiteSpace = Tok.whiteSpace lexer
 
-natural :: P Integer 
+natural :: P Integer
 natural = Tok.natural lexer
 
 stringLiteral :: P String
@@ -86,13 +86,13 @@ tyatom = (reserved "Nat" >> return NatTy)
          <|> parens typeP
 
 typeP :: P Ty
-typeP = try (do 
+typeP = try (do
           x <- tyatom
           reservedOp "->"
           y <- typeP
           return (FunTy x y))
       <|> tyatom
-          
+
 const :: P Const
 const = CNat <$> num
 
@@ -127,13 +127,25 @@ binding = do v <- var
              ty <- typeP
              return (v, ty)
 
+multipleBinding :: P [(Name, Ty)]
+multipleBinding = many1 (parens binding)
+
+functionBinding :: P (Name, Ty, [(Name, Ty)])
+functionBinding = do v <- var
+                     bs <- multipleBinding
+                     reservedOp ":"
+                     ty <- typeP
+                     return (v, ty, bs)
+
 lam :: P STerm
 lam = do i <- getPos
          reserved "fun"
-         (v,ty) <- parens binding
+         bs <- multipleBinding
          reservedOp "->"
          t <- expr
-         return (SLam i (v,ty) t)
+         case length bs of
+            1 -> return (SLam i (head bs) t)
+            _ -> return (SSugarLam i bs t)
 
 -- Nota el parser app también parsea un solo atom.
 app :: P STerm
@@ -165,12 +177,22 @@ letexp :: P STerm
 letexp = do
   i <- getPos
   reserved "let"
-  (v,ty) <- parens binding
-  reservedOp "="  
-  def <- expr
-  reserved "in"
-  body <- expr
-  return (SLet i (v,ty) def body)
+  do
+    (v, ty, bs) <- functionBinding
+    reservedOp "="
+    p <- getPos
+    def <- expr
+    reserved "in"
+    body <- expr
+    return (SFunLet i (v,ty) bs def body)
+    <|>
+   do
+    (v,ty) <- parens binding <|> binding
+    reservedOp "="
+    def <- expr
+    reserved "in"
+    body <- expr
+    return (SLet i (v,ty) def body)
 
 -- | Parser de términos
 tm :: P STerm
@@ -178,7 +200,7 @@ tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
 
 -- | Parser de declaraciones
 decl :: P (Decl STerm)
-decl = do 
+decl = do
      i <- getPos
      reserved "let"
      v <- var
@@ -204,3 +226,6 @@ parse :: String -> STerm
 parse s = case runP expr s "" of
             Right t -> t
             Left e -> error ("no parse: " ++ show s)
+
+
+
