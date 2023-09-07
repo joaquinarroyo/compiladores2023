@@ -176,7 +176,7 @@ t2doc at (SLet _ (v,ty) t t') =
   , keywordColor (pretty "in")
   , nest 2 (t2doc False t') ]
 
-t2doc at (SFunLet _ (v,ty) bs t t') =
+t2doc at (SSugarLet _ (v,ty) bs t t') =
   parenIf at $
   sep [
     sep [keywordColor (pretty "let")

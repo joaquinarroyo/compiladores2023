@@ -143,9 +143,9 @@ lam = do i <- getPos
          bs <- multipleBinding
          reservedOp "->"
          t <- expr
-         case length bs of
-            1 -> return (SLam i (head bs) t)
-            _ -> return (SSugarLam i bs t)
+         case bs of
+            [b] -> return (SLam i b t)
+            _   -> return (SSugarLam i bs t)
 
 -- Nota el parser app también parsea un solo atom.
 app :: P STerm
@@ -165,34 +165,48 @@ ifz = do i <- getPos
          return (SIfZ i c t e)
 
 fix :: P STerm
-fix = do i <- getPos
-         reserved "fix"
-         (f, fty) <- parens binding
-         (x, xty) <- parens binding
-         reservedOp "->"
-         t <- expr
-         return (SFix i (f,fty) (x,xty) t)
+fix = do 
+  i <- getPos
+  reserved "fix"
+  (f, fty) <- parens binding
+  xs <- many1 (parens binding)
+  reservedOp "->"
+  t <- expr
+  case xs of
+    [x] -> return (SFix i (f,fty) x t)
+    _   -> return (SSugarFix i (f,fty) xs t)
 
 letexp :: P STerm
-letexp = do
+letexp = try( do
   i <- getPos
   reserved "let"
-  do
+  (v,ty) <- parens binding <|> binding
+  reservedOp "="
+  def <- expr
+  reserved "in"
+  body <- expr
+  return (SLet i (v,ty) def body))
+  <|> try(do 
+    i <- getPos
+    reserved "let"
     (v, ty, bs) <- functionBinding
     reservedOp "="
     p <- getPos
     def <- expr
     reserved "in"
     body <- expr
-    return (SFunLet i (v,ty) bs def body)
-    <|>
-   do
-    (v,ty) <- parens binding <|> binding
+    return (SSugarLet i (v,ty) bs def body))
+  <|> try(do
+    i <- getPos
+    reserved "let"
+    reserved "rec"
+    (v, ty, bs) <- functionBinding
     reservedOp "="
+    p <- getPos
     def <- expr
     reserved "in"
     body <- expr
-    return (SLet i (v,ty) def body)
+    return (SSugarLetRec i (v,ty) bs def body))
 
 -- | Parser de términos
 tm :: P STerm

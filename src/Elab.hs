@@ -31,8 +31,6 @@ elab' env (SV p v) =
 
 elab' _ (SConst p c) = Const p c
 elab' env (SLam p (v, ty) t) = Lam p v ty (close v (elab' (v:env) t))
-elab' env (SSugarLam p [(v, ty)] t) = Lam p v ty (close v (elab' (v:env) t))
-elab' env (SSugarLam p ((v, ty):bs) t) = Lam p v ty (close v (elab' (v:env) (SSugarLam p bs t)))
 elab' env (SFix p (f,fty) (x,xty) t) = Fix p f fty x xty (close2 f x (elab' (x:f:env) t))
 elab' env (SIfZ p c t e) = IfZ p (elab' env c) (elab' env t) (elab' env e)
 -- Operadores binarios
@@ -43,8 +41,14 @@ elab' env (SPrint i str t) = Print i str (elab' env t)
 elab' env (SApp p h a) = App p (elab' env h) (elab' env a)
 elab' env (SLet p (v,vty) def body) =  
   Let p v vty (elab' env def) (close v (elab' (v:env) body))
-elab' env (SFunLet p (v,vty) bs def body) =  
-  Let p v (bindingToType bs vty) (elab' env (SSugarLam p bs def)) (close v (elab' (v:env) body))
+-- Syntax Sugar
+elab' env (SSugarLam p [vty] t) = elab' env (SLam p vty t)
+elab' env (SSugarLam p (vty:vs) t) = elab' env (SLam p vty (SSugarLam p vs t))
+elab' env (SSugarLet p (v,vty) bs def body) = elab' env (SLet p (v, (bindingToType bs vty)) (SSugarLam p bs def) body)
+elab' env (SSugarFix p fty (xty:xs) t) = elab' env (SFix p fty xty (SSugarLam p xs t))
+elab' env (SSugarLetRec p (v,vty) [(x,xty)] def body) = 
+elab' env (SSugarLetRec p (v,vty) [xty:bs] def body) = elab' env (SSugarLetRec p (v, (bindingToType bs vty)) [xty] (SSugarLam p def) body)
+-- elab' env (SSugarFix p (v, (bindingToType bs vty)) (SSugarLam p bs def) body)
 
 elabDecl :: Decl STerm -> Decl Term
 elabDecl = fmap elab
