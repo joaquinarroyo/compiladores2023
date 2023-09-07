@@ -30,6 +30,7 @@ tyEnv g = map (\(Decl _ n b) -> (n, getTy b))  (glb g)
 data Mode =
     Interactive
   | Typecheck
+  | Eval
   -- | InteractiveCEK
   -- | Bytecompile
   -- | RunVM
@@ -44,4 +45,4 @@ data Conf = Conf {
 
 -- | Valor del estado inicial
 initialEnv :: GlEnv
-initialEnv = GlEnv True "" 0 []
+initialEnv = GlEnv False "" 0 []
