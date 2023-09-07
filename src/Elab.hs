@@ -46,8 +46,8 @@ elab' env (SSugarLam p [vty] t) = elab' env (SLam p vty t)
 elab' env (SSugarLam p (vty:vs) t) = elab' env (SLam p vty (SSugarLam p vs t))
 elab' env (SSugarLet p (v,vty) bs def body) = elab' env (SLet p (v, (bindingToType bs vty)) (SSugarLam p bs def) body)
 elab' env (SSugarFix p fty (xty:xs) t) = elab' env (SFix p fty xty (SSugarLam p xs t))
-elab' env (SSugarLetRec p (v,vty) [(x,xty)] def body) = 
-elab' env (SSugarLetRec p (v,vty) [xty:bs] def body) = elab' env (SSugarLetRec p (v, (bindingToType bs vty)) [xty] (SSugarLam p def) body)
+-- elab' env (SSugarLetRec p (v,vty) [(x,xty)] def body) = 
+-- elab' env (SSugarLetRec p (v,vty) [xty:bs] def body) = elab' env (SSugarLetRec p (v, (bindingToType bs vty)) [xty] (SSugarLam p def) body)
 -- elab' env (SSugarFix p (v, (bindingToType bs vty)) (SSugarLam p bs def) body)
 
 elabDecl :: Decl STerm -> Decl Term

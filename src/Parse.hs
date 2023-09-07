@@ -177,7 +177,12 @@ fix = do
     _   -> return (SSugarFix i (f,fty) xs t)
 
 letexp :: P STerm
-letexp = try( do
+letexp = try commonLet
+  <|> try sugarLet
+  <|> try sugarLetRec
+
+commonLet :: P STerm
+commonLet = do
   i <- getPos
   reserved "let"
   (v,ty) <- parens binding <|> binding
@@ -185,28 +190,32 @@ letexp = try( do
   def <- expr
   reserved "in"
   body <- expr
-  return (SLet i (v,ty) def body))
-  <|> try(do 
-    i <- getPos
-    reserved "let"
-    (v, ty, bs) <- functionBinding
-    reservedOp "="
-    p <- getPos
-    def <- expr
-    reserved "in"
-    body <- expr
-    return (SSugarLet i (v,ty) bs def body))
-  <|> try(do
-    i <- getPos
-    reserved "let"
-    reserved "rec"
-    (v, ty, bs) <- functionBinding
-    reservedOp "="
-    p <- getPos
-    def <- expr
-    reserved "in"
-    body <- expr
-    return (SSugarLetRec i (v,ty) bs def body))
+  return (SLet i (v,ty) def body)
+
+sugarLet :: P STerm
+sugarLet = do 
+  i <- getPos
+  reserved "let"
+  (v, ty, bs) <- functionBinding
+  reservedOp "="
+  p <- getPos
+  def <- expr
+  reserved "in"
+  body <- expr
+  return (SSugarLet i (v,ty) bs def body)
+
+sugarLetRec :: P STerm
+sugarLetRec = do
+  i <- getPos
+  reserved "let"
+  reserved "rec"
+  (v, ty, bs) <- functionBinding
+  reservedOp "="
+  p <- getPos
+  def <- expr
+  reserved "in"
+  body <- expr
+  return (SSugarLetRec i (v,ty) bs def body)
 
 -- | Parser de términos
 tm :: P STerm
