@@ -10,7 +10,7 @@ Stability   : experimental
 
 -}
 
-module Parse (tm, Parse.parse, decl, runP, P, program, declOrTm) where
+module Parse (tm, Parse.parse, sdecl, runP, P, program, declOrTm) where
 
 import Prelude hiding ( const )
 import Lang hiding (getPos)
@@ -22,6 +22,7 @@ import Text.ParserCombinators.Parsec.Language --( GenLanguageDef(..), emptyDef )
 import qualified Text.Parsec.Expr as Ex
 import Text.Parsec.Expr (Operator, Assoc)
 import Control.Monad.Identity (Identity)
+import Options.Applicative (style)
 
 type P = Parsec String ()
 
@@ -91,7 +92,10 @@ typeP = try (do
           reservedOp "->"
           y <- typeP
           return (FunTy x y))
-      <|> tyatom
+      <|> try tyatom
+      <|> do
+        n <- var
+        return (SynTy n)
 
 const :: P Const
 const = CNat <$> num
@@ -165,7 +169,7 @@ ifz = do i <- getPos
          return (SIfZ i c t e)
 
 fix :: P STerm
-fix = do 
+fix = do
   i <- getPos
   reserved "fix"
   (f, fty) <- parens binding
@@ -181,7 +185,6 @@ letexp = try commonLet
   <|> try sugarLet
   <|> try sugarLetRec
 
-
 commonLet :: P STerm
 commonLet = do
   i <- getPos
@@ -194,7 +197,7 @@ commonLet = do
   return (SLet i (v,ty) def body)
 
 sugarLet :: P STerm
-sugarLet = do 
+sugarLet = do
   i <- getPos
   reserved "let"
   (v, ty, bs) <- functionBinding
@@ -222,24 +225,58 @@ sugarLetRec = do
 tm :: P STerm
 tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
 
--- | Parser de declaraciones
-decl :: P (Decl STerm)
-decl = do
+-- | Parser de declaraciones superficiales y sinonimos de tipos
+sdecl :: P SDecl
+sdecl = try recDecl
+    <|> try noRecDecl
+    <|> stype
+
+noRecDecl :: P SDecl
+noRecDecl = do
+    i <- getPos
+    reserved "let"
+    (v, ty, bs) <- declArgsBinding
+    reservedOp "="
+    t <- expr
+    return (SDecl i v ty bs t False)
+
+recDecl :: P SDecl
+recDecl = do
      i <- getPos
      reserved "let"
-     v <- var
+     reserved "rec"
+     (v, ty, bs) <- declArgsBinding
      reservedOp "="
      t <- expr
-     return (Decl i v t)
+     return (SDecl i v ty bs t True)
+
+declArgsBinding :: P (Name, Ty, [(Name, Ty)])
+declArgsBinding = do v <- var
+                     bs <- many (parens binding)
+                     reservedOp ":"
+                     ty <- typeP
+                     return (v, ty, bs)
+
+-- | Parser de sinonimos de tipos
+stype :: P SDecl
+stype = do
+  p <- getPos
+  reserved "type"
+  n <- var
+  reserved "="
+  ty <- typeP
+  case ty of
+    (SynTy refTy) -> return (IndirectTypeDecl p n refTy)
+    _ -> return (DirectTypeDecl p n ty)
 
 -- | Parser de programas (listas de declaraciones) 
-program :: P [Decl STerm]
-program = many decl
+program :: P [SDecl]
+program = many sdecl
 
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
-declOrTm :: P (Either (Decl STerm) STerm)
-declOrTm =  try (Left <$> decl) <|> (Right <$> expr)
+declOrTm :: P (Either SDecl STerm)
+declOrTm =  try (Left <$> sdecl) <|> (Right <$> expr)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada
 runP :: P a -> String -> String -> Either ParseError a

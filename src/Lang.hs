@@ -28,15 +28,16 @@ data STm info ty var =
     SV info var
   | SConst info Const
   | SLam info (var, ty) (STm info ty var)
-  | SSugarLam info [(var, ty)] (STm info ty var)
   | SApp info (STm info ty var) (STm info ty var)
   | SPrint info String (STm info ty var)
   | SBinaryOp info BinaryOp (STm info ty var) (STm info ty var)
   | SFix info (var, ty) (var, ty) (STm info ty var)
-  | SSugarFix info (var, ty) [(var, ty)] (STm info ty var)
-  | SSugarLetRec info (var, ty) [(var, ty)] (STm info ty var) (STm info ty var)
   | SIfZ info (STm info ty var) (STm info ty var) (STm info ty var)
   | SLet info (var, ty) (STm info ty var) (STm info ty var)
+  -- sugars
+  | SSugarLam info [(var, ty)] (STm info ty var)
+  | SSugarFix info (var, ty) [(var, ty)] (STm info ty var)
+  | SSugarLetRec info (var, ty) [(var, ty)] (STm info ty var) (STm info ty var)
   | SSugarLet info (var, ty) [(var, ty)] (STm info ty var) (STm info ty var)
   deriving (Show, Functor)
 
@@ -44,6 +45,7 @@ data STm info ty var =
 data Ty =
       NatTy
     | FunTy Ty Ty
+    | SynTy Name
     deriving (Show,Eq)
 
 type Name = String
@@ -60,9 +62,17 @@ data BinaryOp = Add | Sub
 data Decl a = Decl
   { declPos  :: Pos
   , declName :: Name
+  , declType :: Ty
   , declBody :: a
   }
   deriving (Show, Functor)
+
+-- | tipo de datos de declaraciones superficiales y sinonimos de tipos
+data SDecl = 
+    SDecl Pos Name Ty [(Name, Ty)] STerm Bool
+  | DirectTypeDecl Pos Name Ty
+  | IndirectTypeDecl Pos Name Name
+  deriving (Show)
 
 -- | AST de los términos. 
 --   - info es información extra que puede llevar cada nodo. 

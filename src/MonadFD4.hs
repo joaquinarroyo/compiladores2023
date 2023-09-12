@@ -33,6 +33,9 @@ module MonadFD4 (
   failFD4,
   addDecl,
   catchErrors,
+  lookupSinTy,
+  addSinTy,
+  getTySins, 
   MonadFD4,
   module Control.Monad.Except,
   module Control.Monad.State)
@@ -110,6 +113,17 @@ lookupTy :: MonadFD4 m => Name -> m (Maybe Ty)
 lookupTy nm = do
       s <- get
       return $ lookup nm (tyEnv s)
+
+lookupSinTy :: MonadFD4 m => Name -> m (Maybe Ty)
+lookupSinTy nm = do
+      s <- get
+      return $ lookup nm (tySinEnv s)
+
+addSinTy :: MonadFD4 m => SDecl -> m ()
+addSinTy d = modify (\s -> s { tysin = d : tysin s })
+
+getTySins :: MonadFD4 m => m [(Name, Ty)]
+getTySins = gets tySinEnv
 
 failPosFD4 :: MonadFD4 m => Pos -> String -> m a
 failPosFD4 p s = throwError (ErrPos p s)
