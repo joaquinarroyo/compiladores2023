@@ -51,20 +51,21 @@ elab' env (SSugarLet p (v,vty) bs def body) = elab' env (SLet p (v, bindingToTyp
 elab' env (SSugarFix p fty (xty:xs) t) = elab' env (SFix p fty xty (SSugarLam p xs t))
 elab' env (SSugarLetRec p (v,vty) [(x,xty)] def body) =
   elab' env (SLet p fty (SFix p fty (x,xty) def) body)
-  where fty = (v, FunTy xty vty)
+  where fty = (v, FunTy xty vty Nothing)
 elab' env (SSugarLetRec p (v,vty) (xty:bs) def body) =
   elab' env (SSugarLetRec p (v, (bindingToType bs vty)) [xty] (SSugarLam p bs def) body)
 
 elabDecl :: Decl STerm -> Decl Term
 elabDecl = fmap elab
 
+-- | elaborador de declaraciones superficiales
 elabSDecl :: MonadFD4 m => SDecl -> m (Maybe (Decl STerm))
 elabSDecl (SDecl p n ty [] body False) = return $ Just $ Decl p n ty body
 elabSDecl (SDecl p n ty bs body False) =
   return $ Just $ Decl p n (bindingToType bs ty) (SSugarLam p bs body)
 elabSDecl (SDecl p n ty [(x, xty)] body True) =
   return $ Just $ Decl p n fty (SFix p (n, fty) (x,xty) body)
-    where fty = FunTy xty ty
+    where fty = FunTy xty ty Nothing
 elabSDecl (SDecl p n ty (xty:bs) body True) =
   elabSDecl (SDecl p n (bindingToType bs ty) [xty] (SSugarLam p bs body) True)
 elabSDecl (IndirectTypeDecl p n tyn) = do
@@ -76,23 +77,69 @@ elabSDecl d@(DirectTypeDecl p n ty) = do
       addSinTy d
       return Nothing
 
+-- | elaborador de sinonimos de tipos
+--   se corre antes de 'elab' para transformar sinonimos
+--   en tipos base
 elabSynTy :: MonadFD4 m => STerm -> m STerm
 elabSynTy var@(SV p v) = return var
 elabSynTy cn@(SConst p c) = return cn
 elabSynTy (SLam p (v, ty) t) = do
     ty' <- checkSin ty
-    t' <- elabSynTy t
+    t'  <- elabSynTy t
     return $ SLam p (v, ty') t'
 elabSynTy (SFix p (f,fty) (x,xty) t) = do
-    fty' <- checkSin fty
+    fty' <- checkSin fty 
     xty' <- checkSin xty
-    t' <- elabSynTy t
+    t'   <- elabSynTy t
     return $ SFix p (f, fty') (x, xty') t'
+elabSynTy (SIfZ p c t e) = do
+    c' <- elabSynTy c 
+    t' <- elabSynTy t
+    e' <- elabSynTy e
+    return $ SIfZ p c' t' e'
+elabSynTy (SBinaryOp i o t u) = do
+    t' <- elabSynTy t 
+    u' <- elabSynTy u
+    return $ SBinaryOp i o t' u'
+elabSynTy (SPrint i str t) = do
+    t' <- elabSynTy t
+    return $ SPrint i str t'
+elabSynTy (SApp p h a) = do
+    h' <- elabSynTy h
+    a' <- elabSynTy a
+    return $ SApp p h' a'
+elabSynTy (SLet p (v,vty) def body) = do
+    vty'  <- checkSin vty
+    def'  <- elabSynTy def
+    body' <- elabSynTy body
+    return $ SLet p (v, vty') def' body'
+elabSynTy (SSugarLam p vs t) = do
+    vs' <- checkSins vs
+    t'  <- elabSynTy t
+    return $ SSugarLam p vs' t'
+elabSynTy (SSugarLet p (v,vty) vs def body) = do
+    vty'  <- checkSin vty
+    vs'   <- checkSins vs
+    def'  <- elabSynTy def
+    body' <- elabSynTy body
+    return $ SSugarLet p (v, vty') vs' def' body'
+elabSynTy (SSugarFix p (f, fty) vs t) = do
+    fty' <- checkSin fty
+    vs'  <- checkSins vs
+    t'   <- elabSynTy t
+    return $ SSugarFix p (f, fty') vs' t'
+elabSynTy (SSugarLetRec p (v,vty) vs def body) = do
+    vty'  <- checkSin vty
+    vs'   <- checkSins vs
+    def'  <- elabSynTy def
+    body' <- elabSynTy body
+    return $ SSugarLetRec p (v, vty') vs' def' body'
 
------------------------- helpers (Ver donde poner)
+
+------------------------ helpers (Ver donde poner) ------------------------
 bindingToType :: [(Name, Ty)] -> Ty -> Ty
-bindingToType [(_, t)] ty = FunTy t ty
-bindingToType ((_, t):bs) ty = FunTy t (bindingToType bs ty)
+bindingToType [(_, t)] ty = FunTy t ty Nothing
+bindingToType ((_, t):bs) ty = FunTy t (bindingToType bs ty) Nothing
 
 checkSin :: MonadFD4 m => Ty -> m Ty
 checkSin (SynTy n) = do
@@ -102,3 +149,11 @@ checkSin (SynTy n) = do
     Just ty -> return ty
 checkSin ty = return ty
 
+checkSins :: MonadFD4 m => [(Name, Ty)] -> m [(Name, Ty)]
+checkSins [(v, vty)] = do
+    vty' <- checkSin vty
+    return [(v, vty')]
+checkSins ((v, vty):vs) = do
+    vty' <- checkSin vty
+    vs' <- checkSins vs
+    return $ (v, vty') : vs
