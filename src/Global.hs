@@ -27,7 +27,7 @@ tyEnv g = map (\(Decl _ n _ b) -> (n, getTy b))  (glb g)
 
 -- ^ Entorno de sinonimos de tipos
 tySinEnv :: GlEnv -> [(Name, Ty)]
-tySinEnv g = map (\(DirectTypeDecl _ n ty ) -> (n, ty))  (tysin g)
+tySinEnv g = map (\(DirectTypeDecl _ n ty) -> (n, ty))  (tysin g)
 
 {-
  Tipo para representar las banderas disponibles en línea de comando.
