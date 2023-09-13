@@ -61,18 +61,21 @@ elabDecl = fmap elab
 -- | elaborador de declaraciones superficiales
 elabSDecl :: MonadFD4 m => SDecl -> m (Maybe (Decl STerm))
 elabSDecl (SDecl p n ty [] body False) = do
+    ty' <- checkSin ty
     body' <- elabSynTy body
-    return $ Just $ Decl p n ty body'
+    return $ Just $ Decl p n ty' body'
 elabSDecl (SDecl p n ty bs body False) = do
+    ty' <- checkSin ty
     sslam <- elabSynTy (SSugarLam p bs body)
-    return $ Just $ Decl p n (bindingToType bs ty) sslam
+    return $ Just $ Decl p n (bindingToType bs ty') sslam
 elabSDecl (SDecl p n ty [(x, xty)] body True) = do
-    sfix <- elabSynTy (SFix p (n, fty) (x,xty) body)
-    return $ Just $ Decl p n fty sfix
-      where fty = FunTy xty ty Nothing
+    ty' <- checkSin ty
+    sfix <- elabSynTy (SFix p (n, (FunTy xty ty' Nothing)) (x,xty) body)
+    return $ Just $ Decl p n (FunTy xty ty' Nothing) sfix
 elabSDecl (SDecl p n ty (xty:bs) body True) = do
+    ty' <- checkSin ty
     sslam <- elabSynTy (SSugarLam p bs body)
-    elabSDecl (SDecl p n (bindingToType bs ty) [xty] sslam True)
+    elabSDecl (SDecl p n (bindingToType bs ty') [xty] sslam True)
 elabSDecl (IndirectTypeDecl p n tyn) = do
       mty <- lookupSinTy tyn
       case mty of
