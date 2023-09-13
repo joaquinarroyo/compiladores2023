@@ -83,7 +83,7 @@ getPos = do pos <- getPosition
             return $ Pos (sourceLine pos) (sourceColumn pos)
 
 tyatom :: P Ty
-tyatom = (reserved "Nat" >> return NatTy)
+tyatom = (reserved "Nat" >> return (NatTy Nothing))
          <|> parens typeP
 
 typeP :: P Ty
@@ -91,7 +91,7 @@ typeP = try (do
           x <- tyatom
           reservedOp "->"
           y <- typeP
-          return (FunTy x y))
+          return (FunTy x y Nothing))
       <|> try tyatom
       <|> do
         n <- var
@@ -183,13 +183,13 @@ fix = do
 letexp :: P STerm
 letexp = try commonLet
   <|> try sugarLet
-  <|> try sugarLetRec
+  <|> sugarLetRec
 
 commonLet :: P STerm
 commonLet = do
   i <- getPos
   reserved "let"
-  (v,ty) <- parens binding <|> binding
+  (v,ty) <- try binding <|> parens binding
   reservedOp "="
   def <- expr
   reserved "in"
@@ -267,7 +267,8 @@ stype = do
   ty <- typeP
   case ty of
     (SynTy refTy) -> return (IndirectTypeDecl p n refTy)
-    _ -> return (DirectTypeDecl p n ty)
+    (NatTy _) -> return (DirectTypeDecl p n (NatTy (Just n)))
+    (FunTy a b _) -> return (DirectTypeDecl p n (FunTy a b (Just n)))
 
 -- | Parser de programas (listas de declaraciones) 
 program :: P [SDecl]
