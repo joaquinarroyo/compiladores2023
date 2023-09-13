@@ -36,17 +36,24 @@ data STm info ty var =
   | SLet info (var, ty) (STm info ty var) (STm info ty var)
   -- sugars
   | SSugarLam info [(var, ty)] (STm info ty var)
+  | SSugarLet info (var, ty) [(var, ty)] (STm info ty var) (STm info ty var)
   | SSugarFix info (var, ty) [(var, ty)] (STm info ty var)
   | SSugarLetRec info (var, ty) [(var, ty)] (STm info ty var) (STm info ty var)
-  | SSugarLet info (var, ty) [(var, ty)] (STm info ty var) (STm info ty var)
   deriving (Show, Functor)
 
 -- | AST de Tipos
 data Ty =
-      NatTy
-    | FunTy Ty Ty
+      NatTy (Maybe Name)
+    | FunTy Ty Ty (Maybe Name)
     | SynTy Name
-    deriving (Show,Eq)
+    deriving (Show)
+
+instance Eq Ty where
+  NatTy _ == NatTy _ = True
+  FunTy t1 t2 _ == FunTy t3 t4 _ = t1 == t3 && t2 == t4
+  SynTy n1 == SynTy n2 = n1 == n2
+  _ == _ = False
+
 
 type Name = String
 
@@ -87,7 +94,7 @@ data Tm info var =
   | BinaryOp info BinaryOp (Tm info var) (Tm info var)
   | Fix info Name Ty Name Ty (Scope2 info var)
   | IfZ info (Tm info var) (Tm info var) (Tm info var)
-  | Let info Name Ty (Tm info var)  (Scope info var)
+  | Let info Name Ty (Tm info var) (Scope info var)
   deriving (Show, Functor)
 
 
