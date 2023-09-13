@@ -96,9 +96,18 @@ ppName = id
 
 -- | Pretty printer para tipos (Doc)
 ty2doc :: Ty -> Doc AnsiStyle
-ty2doc NatTy     = typeColor (pretty "Nat")
-ty2doc (FunTy x@(FunTy _ _) y) = sep [parens (ty2doc x), typeOpColor (pretty "->"),ty2doc y]
-ty2doc (FunTy x y) = sep [ty2doc x, typeOpColor (pretty "->"),ty2doc y] 
+ty2doc (NatTy mty) = case mty of
+                      Nothing -> typeColor (pretty "Nat")
+                      Just ty -> typeColor (pretty ty)
+ty2doc (FunTy x@(FunTy _ _ _) y mty) = case mty of
+                                        Nothing -> sep [parens (ty2doc x), typeOpColor (pretty "->"),ty2doc y]
+                                        Just ty -> typeColor (pretty ty)
+ty2doc (FunTy x y mty) = case mty of
+                          Nothing -> sep [ty2doc x, typeOpColor (pretty "->"),ty2doc y] 
+                          Just ty -> typeColor (pretty ty)
+ty2doc (SynTy n) = typeColor (pretty n)
+  
+  
 
 -- | Pretty printer para tipos (String)
 ppTy :: Ty -> String
