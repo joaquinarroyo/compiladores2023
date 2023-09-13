@@ -22,7 +22,6 @@ import Text.ParserCombinators.Parsec.Language --( GenLanguageDef(..), emptyDef )
 import qualified Text.Parsec.Expr as Ex
 import Text.Parsec.Expr (Operator, Assoc)
 import Control.Monad.Identity (Identity)
-import Options.Applicative (style)
 
 type P = Parsec String ()
 
@@ -84,7 +83,10 @@ getPos = do pos <- getPosition
 
 tyatom :: P Ty
 tyatom = (reserved "Nat" >> return (NatTy Nothing))
-         <|> parens typeP
+         <|> try (parens typeP)
+         <|> do 
+          n <- var
+          return (SynTy n)
 
 typeP :: P Ty
 typeP = try (do
@@ -93,9 +95,6 @@ typeP = try (do
           y <- typeP
           return (FunTy x y Nothing))
       <|> try tyatom
-      <|> do
-        n <- var
-        return (SynTy n)
 
 const :: P Const
 const = CNat <$> num
@@ -235,7 +234,7 @@ noRecDecl :: P SDecl
 noRecDecl = do
     i <- getPos
     reserved "let"
-    (v, ty, bs) <- declArgsBinding
+    (v, ty, bs) <- try declArgsBinding <|> parens declArgsBinding
     reservedOp "="
     t <- expr
     return (SDecl i v ty bs t False)
@@ -266,9 +265,19 @@ stype = do
   reserved "="
   ty <- typeP
   case ty of
-    (SynTy refTy) -> return (IndirectTypeDecl p n refTy)
+    ts@(SynTy refTy) -> return (IndirectTypeDecl p n ts)
     (NatTy _) -> return (DirectTypeDecl p n (NatTy (Just n)))
-    (FunTy a b _) -> return (DirectTypeDecl p n (FunTy a b (Just n)))
+    f@(FunTy a b _) -> case checkDirect f of
+                        False -> return (DirectTypeDecl p n (FunTy a b (Just n)))
+                        True -> return (IndirectTypeDecl p n (FunTy a b (Just n)))
+    where
+      checkDirect (FunTy (SynTy _) _ _) = True
+      checkDirect (FunTy _ (SynTy _) _) = True
+      checkDirect (FunTy f1@(FunTy {}) f2@(FunTy {}) _) = checkDirect f1 && checkDirect f2
+      checkDirect (FunTy f1@(FunTy {}) _ _) = checkDirect f1
+      checkDirect (FunTy _ f2@(FunTy {}) _) = checkDirect f2
+      checkDirect _ = False
+
 
 -- | Parser de programas (listas de declaraciones) 
 program :: P [SDecl]

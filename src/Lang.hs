@@ -78,7 +78,7 @@ data Decl a = Decl
 data SDecl = 
     SDecl Pos Name Ty [(Name, Ty)] STerm Bool
   | DirectTypeDecl Pos Name Ty
-  | IndirectTypeDecl Pos Name Name
+  | IndirectTypeDecl Pos Name Ty
   deriving (Show)
 
 -- | AST de los términos. 

@@ -17,7 +17,8 @@ module Elab ( elab, elabDecl, elabSDecl, elabSynTy ) where
 
 import Lang
 import Subst
-import MonadFD4 ( MonadFD4, failPosFD4, lookupSinTy, addSinTy, failFD4 )
+import MonadFD4 ( MonadFD4, failPosFD4, lookupSinTy, addSinTy, printFD4, failFD4 )
+import Common ( Pos )
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
 -- en un término dado. 
@@ -61,26 +62,31 @@ elabDecl = fmap elab
 -- | elaborador de declaraciones superficiales
 elabSDecl :: MonadFD4 m => SDecl -> m (Maybe (Decl STerm))
 elabSDecl (SDecl p n ty [] body False) = do
-    ty' <- checkSin ty
+    ty' <- checkSin p ty
     body' <- elabSynTy body
     return $ Just $ Decl p n ty' body'
 elabSDecl (SDecl p n ty bs body False) = do
-    ty' <- checkSin ty
+    ty' <- checkSin p ty
     sslam <- elabSynTy (SSugarLam p bs body)
     return $ Just $ Decl p n (bindingToType bs ty') sslam
 elabSDecl (SDecl p n ty [(x, xty)] body True) = do
-    ty' <- checkSin ty
+    ty' <- checkSin p ty
     sfix <- elabSynTy (SFix p (n, (FunTy xty ty' Nothing)) (x,xty) body)
     return $ Just $ Decl p n (FunTy xty ty' Nothing) sfix
 elabSDecl (SDecl p n ty (xty:bs) body True) = do
-    ty' <- checkSin ty
+    ty' <- checkSin p ty
     sslam <- elabSynTy (SSugarLam p bs body)
     elabSDecl (SDecl p n (bindingToType bs ty') [xty] sslam True)
-elabSDecl (IndirectTypeDecl p n tyn) = do
-      mty <- lookupSinTy tyn
-      case mty of
+elabSDecl (IndirectTypeDecl p n (FunTy a b s)) = do
+    a' <- checkSin p a
+    b' <- checkSin p b
+    elabSDecl (DirectTypeDecl p n (FunTy a' b' s))
+elabSDecl (IndirectTypeDecl p n (SynTy tyn)) = do
+    mty <- lookupSinTy tyn
+    case mty of
         Nothing -> failPosFD4 p "Type synonym not declared"
         Just ty -> elabSDecl (DirectTypeDecl p n ty)
+elabSDecl (IndirectTypeDecl p n ty) = failFD4 "IndirectTypeDecl: No deberia pasar"
 elabSDecl d@(DirectTypeDecl p n ty) = do 
       addSinTy d
       return Nothing
@@ -92,12 +98,12 @@ elabSynTy :: MonadFD4 m => STerm -> m STerm
 elabSynTy var@(SV p v) = return var
 elabSynTy cn@(SConst p c) = return cn
 elabSynTy (SLam p (v, ty) t) = do
-    ty' <- checkSin ty
+    ty' <- checkSin p ty
     t'  <- elabSynTy t
     return $ SLam p (v, ty') t'
 elabSynTy (SFix p (f,fty) (x,xty) t) = do
-    fty' <- checkSin fty 
-    xty' <- checkSin xty
+    fty' <- checkSin p fty 
+    xty' <- checkSin p xty
     t'   <- elabSynTy t
     return $ SFix p (f, fty') (x, xty') t'
 elabSynTy (SIfZ p c t e) = do
@@ -117,28 +123,28 @@ elabSynTy (SApp p h a) = do
     a' <- elabSynTy a
     return $ SApp p h' a'
 elabSynTy (SLet p (v,vty) def body) = do
-    vty'  <- checkSin vty
+    vty'  <- checkSin p vty
     def'  <- elabSynTy def
     body' <- elabSynTy body
     return $ SLet p (v, vty') def' body'
 elabSynTy (SSugarLam p vs t) = do
-    vs' <- checkSins vs
+    vs' <- checkSins p vs
     t'  <- elabSynTy t
     return $ SSugarLam p vs' t'
 elabSynTy (SSugarLet p (v,vty) vs def body) = do
-    vty'  <- checkSin vty
-    vs'   <- checkSins vs
+    vty'  <- checkSin p vty
+    vs'   <- checkSins p vs
     def'  <- elabSynTy def
     body' <- elabSynTy body
     return $ SSugarLet p (v, vty') vs' def' body'
 elabSynTy (SSugarFix p (f, fty) vs t) = do
-    fty' <- checkSin fty
-    vs'  <- checkSins vs
+    fty' <- checkSin p fty
+    vs'  <- checkSins p vs
     t'   <- elabSynTy t
     return $ SSugarFix p (f, fty') vs' t'
 elabSynTy (SSugarLetRec p (v,vty) vs def body) = do
-    vty'  <- checkSin vty
-    vs'   <- checkSins vs
+    vty'  <- checkSin p vty
+    vs'   <- checkSins p vs
     def'  <- elabSynTy def
     body' <- elabSynTy body
     return $ SSugarLetRec p (v, vty') vs' def' body'
@@ -149,19 +155,23 @@ bindingToType :: [(Name, Ty)] -> Ty -> Ty
 bindingToType [(_, t)] ty = FunTy t ty Nothing
 bindingToType ((_, t):bs) ty = FunTy t (bindingToType bs ty) Nothing
 
-checkSin :: MonadFD4 m => Ty -> m Ty
-checkSin (SynTy n) = do
+checkSin :: MonadFD4 m => Pos -> Ty -> m Ty
+checkSin p (SynTy n) = do
   mty <- lookupSinTy n
   case mty of
-    Nothing -> failFD4 "Type synonym not declared"
+    Nothing -> failPosFD4 p "Type synonym not declared"
     Just ty -> return ty
-checkSin ty = return ty
+checkSin p (FunTy a b n) = do
+    a' <- checkSin p a
+    b' <- checkSin p b
+    return $ FunTy a' b' n
+checkSin _ ty = return ty
 
-checkSins :: MonadFD4 m => [(Name, Ty)] -> m [(Name, Ty)]
-checkSins [(v, vty)] = do
-    vty' <- checkSin vty
+checkSins :: MonadFD4 m => Pos -> [(Name, Ty)] -> m [(Name, Ty)]
+checkSins p [(v, vty)] = do
+    vty' <- checkSin p vty
     return [(v, vty')]
-checkSins ((v, vty):vs) = do
-    vty' <- checkSin vty
-    vs' <- checkSins vs
+checkSins p ((v, vty):vs) = do
+    vty' <- checkSin p vty
+    vs' <- checkSins p vs
     return $ (v, vty') : vs

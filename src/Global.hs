@@ -23,7 +23,7 @@ data GlEnv = GlEnv {
 
 -- ^ Entorno de tipado de declaraciones globales
 tyEnv :: GlEnv ->  [(Name,Ty)]
-tyEnv g = map (\(Decl _ n _ b) -> (n, getTy b))  (glb g)
+tyEnv g = map (\(Decl _ n ty b) -> (n, ty))  (glb g)
 
 -- ^ Entorno de sinonimos de tipos
 tySinEnv :: GlEnv -> [(Name, Ty)]
