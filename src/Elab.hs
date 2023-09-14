@@ -17,8 +17,8 @@ module Elab ( elab, elabDecl, elabSDecl, elabSynTy ) where
 
 import Lang
 import Subst
-import MonadFD4 ( MonadFD4, failPosFD4, lookupSinTy, addSinTy, printFD4, failFD4 )
-import Common ( Pos )
+import MonadFD4 ( MonadFD4, failPosFD4, lookupSinTy, addSinTy, failFD4 )
+import Helper
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
 -- en un término dado. 
@@ -56,6 +56,7 @@ elab' env (SSugarLetRec p (v,vty) [(x,xty)] def body) =
 elab' env (SSugarLetRec p (v,vty) (xty:bs) def body) =
   elab' env (SSugarLetRec p (v, (bindingToType bs vty)) [xty] (SSugarLam p bs def) body)
 
+-- | elaborador de declaraciones core
 elabDecl :: Decl STerm -> Decl Term
 elabDecl = fmap elab
 
@@ -148,30 +149,3 @@ elabSynTy (SSugarLetRec p (v,vty) vs def body) = do
     def'  <- elabSynTy def
     body' <- elabSynTy body
     return $ SSugarLetRec p (v, vty') vs' def' body'
-
-
------------------------- helpers (Ver donde poner) ------------------------
-bindingToType :: [(Name, Ty)] -> Ty -> Ty
-bindingToType [(_, t)] ty = FunTy t ty Nothing
-bindingToType ((_, t):bs) ty = FunTy t (bindingToType bs ty) Nothing
-
-checkSin :: MonadFD4 m => Pos -> Ty -> m Ty
-checkSin p (SynTy n) = do
-  mty <- lookupSinTy n
-  case mty of
-    Nothing -> failPosFD4 p "Type synonym not declared"
-    Just ty -> return ty
-checkSin p (FunTy a b n) = do
-    a' <- checkSin p a
-    b' <- checkSin p b
-    return $ FunTy a' b' n
-checkSin _ ty = return ty
-
-checkSins :: MonadFD4 m => Pos -> [(Name, Ty)] -> m [(Name, Ty)]
-checkSins p [(v, vty)] = do
-    vty' <- checkSin p vty
-    return [(v, vty')]
-checkSins p ((v, vty):vs) = do
-    vty' <- checkSin p vty
-    vs' <- checkSins p vs
-    return $ (v, vty') : vs
