@@ -123,40 +123,48 @@ atom =     (flip SConst <$> const <*> getPos)
        <|> parens expr
        <|> printOp
 
--- parsea un par (variable : tipo)
+-- | Parsea un par (variable : tipo)
 binding :: P (Name, Ty)
 binding = do v <- var
              reservedOp ":"
              ty <- typeP
              return (v, ty)
 
-multipleBinding :: P [(Name, Ty)]
-multipleBinding = many1 (parens binding)
+-- | Parsea un multipleBinder (x1 ... xn : t)
+multipleBinder :: P ([Name], Ty)
+multipleBinder = parens (do
+                          vs <- many var
+                          reservedOp ":"
+                          ty <- typeP
+                          return (vs, ty))
 
+-- | Parsea una declaracion de una funcion.
+--   Puede tener o no multiplesBinders
 functionBinding :: P (Name, Ty, [(Name, Ty)])
-functionBinding = do v <- var
-                     bs <- multipleBinding
-                     reservedOp ":"
-                     ty <- typeP
-                     return (v, ty, bs)
+functionBinding = do
+                    v <- var
+                    bs <- many1 multipleBinder
+                    reservedOp ":"
+                    ty <- typeP
+                    return (v, ty, concat (map (\(vs, ty') -> [(v', ty') | v' <- vs]) bs)) -- ver si hacemos el flatten en un helper
 
+-- | Fun parser
 lam :: P STerm
 lam = do i <- getPos
          reserved "fun"
-         bs <- multipleBinding
+         bs <- many1 multipleBinder
          reservedOp "->"
          t <- expr
-         case bs of
-            [b] -> return (SLam i b t)
-            _   -> return (SSugarLam i bs t)
+         return (SSugarLam i (concat (map (\(vs, ty') -> [(v', ty') | v' <- vs]) bs)) t) -- ver si hacemos el flatten en un helper
 
--- Nota el parser app también parsea un solo atom.
+-- | Nota el parser app también parsea un solo atom.
 app :: P STerm
 app = do i <- getPos
          f <- atom
          args <- many atom
          return (foldl (SApp i) f args)
 
+-- | Ifz parser
 ifz :: P STerm
 ifz = do i <- getPos
          reserved "ifz"
@@ -167,6 +175,7 @@ ifz = do i <- getPos
          e <- expr
          return (SIfZ i c t e)
 
+-- | Fix parser
 fix :: P STerm
 fix = do
   i <- getPos
@@ -175,10 +184,10 @@ fix = do
   xs <- many1 (parens binding)
   reservedOp "->"
   t <- expr
-  case xs of
-    [x] -> return (SFix i (f,fty) x t)
-    _   -> return (SSugarFix i (f,fty) xs t)
+  return (SSugarFix i (f,fty) xs t)
 
+-- | LetExp parser. 
+--   Parsea tanto el comun, como el sugar y el sugar recursivo
 letexp :: P STerm
 letexp = try commonLet
   <|> try sugarLet
@@ -201,7 +210,6 @@ sugarLet = do
   reserved "let"
   (v, ty, bs) <- functionBinding
   reservedOp "="
-  p <- getPos
   def <- expr
   reserved "in"
   body <- expr
@@ -214,7 +222,6 @@ sugarLetRec = do
   reserved "rec"
   (v, ty, bs) <- functionBinding
   reservedOp "="
-  p <- getPos
   def <- expr
   reserved "in"
   body <- expr
@@ -224,37 +231,38 @@ sugarLetRec = do
 tm :: P STerm
 tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
 
--- | Parser de declaraciones superficiales y sinonimos de tipos
+-- | Parser de declaraciones superficiales y sinonimos de tipos.
+--   Parsea tanto las declaraciones comunes como las recursivas.
 sdecl :: P SDecl
-sdecl = try recDecl
-    <|> try noRecDecl
+sdecl = try noRecDecl
+    <|> try recDecl
     <|> stype
 
 noRecDecl :: P SDecl
 noRecDecl = do
     i <- getPos
     reserved "let"
-    (v, ty, bs) <- try declArgsBinding <|> parens declArgsBinding
-    reservedOp "="
-    t <- expr
-    return (SDecl i v ty bs t False)
+    (try (do
+        (v, ty, bs) <- functionBinding
+        reservedOp "="
+        t <- expr
+        return (SDecl i v ty bs t False))
+      <|>
+      do 
+        (v, ty) <- try binding <|> parens binding
+        reservedOp "="
+        t <- expr
+        return (SDecl i v ty [] t False))
 
 recDecl :: P SDecl
 recDecl = do
      i <- getPos
      reserved "let"
      reserved "rec"
-     (v, ty, bs) <- declArgsBinding
+     (v, ty, bs) <- functionBinding
      reservedOp "="
      t <- expr
      return (SDecl i v ty bs t True)
-
-declArgsBinding :: P (Name, Ty, [(Name, Ty)])
-declArgsBinding = do v <- var
-                     bs <- many (parens binding)
-                     reservedOp ":"
-                     ty <- typeP
-                     return (v, ty, bs)
 
 -- | Parser de sinonimos de tipos
 stype :: P SDecl
@@ -271,6 +279,7 @@ stype = do
                         False -> return (DirectTypeDecl p n (FunTy a b (Just n)))
                         True -> return (IndirectTypeDecl p n (FunTy a b (Just n)))
     where
+      -- Funcion para chequear si un tipo funcion esta formado por sinonimos
       checkDirect (FunTy (SynTy _) _ _) = True
       checkDirect (FunTy _ (SynTy _) _) = True
       checkDirect (FunTy f1@(FunTy {}) f2@(FunTy {}) _) = checkDirect f1 && checkDirect f2
