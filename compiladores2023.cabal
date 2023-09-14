@@ -37,6 +37,7 @@ executable compiladores2023
         Parse
         Subst
         TypeChecker
+        Helper
 
     ghc-options: 
         -threaded 
