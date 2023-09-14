@@ -1,0 +1,2 @@
+type Integer = Nat 
+type Fun = Integer -> Integer

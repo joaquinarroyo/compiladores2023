@@ -17,7 +17,7 @@ module Elab ( elab, elabDecl, elabSDecl, elabSynTy ) where
 
 import Lang
 import Subst
-import MonadFD4 ( MonadFD4, failPosFD4, lookupSinTy, addSinTy, failFD4 )
+import MonadFD4 ( MonadFD4, failPosFD4, lookupSinTy, addSinTy, failFD4, printFD4 )
 import Helper
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
@@ -40,7 +40,10 @@ elab' env (SIfZ p c t e) = IfZ p (elab' env c) (elab' env t) (elab' env e)
 -- Operadores binarios
 elab' env (SBinaryOp i o t u) = BinaryOp i o (elab' env t) (elab' env u)
 -- Operador Print
-elab' env (SPrint i str t) = Print i str (elab' env t)
+elab' env (SPrint i str (Just t)) = Print i str (elab' env t)
+elab' env (SPrint i str Nothing) = 
+    Lam i v (NatTy Nothing) (close v (Print i str (elab' (v:env) (SV i v))))
+        where v = "x"
 -- Aplicaciones generales
 elab' env (SApp p h a) = App p (elab' env h) (elab' env a)
 elab' env (SLet p (v,vty) def body) =
@@ -68,16 +71,20 @@ elabSDecl (SDecl p n ty [] body False) = do
     return $ Just $ Decl p n ty' body'
 elabSDecl (SDecl p n ty bs body False) = do
     ty' <- checkSin p ty
-    sslam <- elabSynTy (SSugarLam p bs body)
-    return $ Just $ Decl p n (bindingToType bs ty') sslam
+    bs' <- checkSins p bs
+    sslam <- elabSynTy (SSugarLam p bs' body)
+    return $ Just $ Decl p n (bindingToType bs' ty') sslam
 elabSDecl (SDecl p n ty [(x, xty)] body True) = do
     ty' <- checkSin p ty
-    sfix <- elabSynTy (SFix p (n, (FunTy xty ty' Nothing)) (x,xty) body)
-    return $ Just $ Decl p n (FunTy xty ty' Nothing) sfix
-elabSDecl (SDecl p n ty (xty:bs) body True) = do
+    xty' <- checkSin p xty
+    sfix <- elabSynTy (SFix p (n, (FunTy xty' ty' Nothing)) (x,xty') body)
+    return $ Just $ Decl p n (FunTy xty' ty' Nothing) sfix
+elabSDecl (SDecl p n ty ((x, xty):bs) body True) = do
     ty' <- checkSin p ty
-    sslam <- elabSynTy (SSugarLam p bs body)
-    elabSDecl (SDecl p n (bindingToType bs ty') [xty] sslam True)
+    xty' <- checkSin p xty
+    bs' <- checkSins p bs
+    sslam <- elabSynTy (SSugarLam p bs' body)
+    elabSDecl (SDecl p n (bindingToType bs' ty') [(x, xty')] sslam True)
 elabSDecl (IndirectTypeDecl p n (FunTy a b s)) = do
     a' <- checkSin p a
     b' <- checkSin p b
@@ -116,9 +123,12 @@ elabSynTy (SBinaryOp i o t u) = do
     t' <- elabSynTy t 
     u' <- elabSynTy u
     return $ SBinaryOp i o t' u'
-elabSynTy (SPrint i str t) = do
-    t' <- elabSynTy t
-    return $ SPrint i str t'
+elabSynTy (SPrint i str mt) = do
+    case mt of
+        Just t -> do
+            t' <- elabSynTy t
+            return $ SPrint i str (Just t')
+        Nothing -> return $ SPrint i str mt
 elabSynTy (SApp p h a) = do
     h' <- elabSynTy h
     a' <- elabSynTy a

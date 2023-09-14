@@ -84,7 +84,7 @@ getPos = do pos <- getPosition
 tyatom :: P Ty
 tyatom = (reserved "Nat" >> return (NatTy Nothing))
          <|> try (parens typeP)
-         <|> do 
+         <|> do
           n <- var
           return (SynTy n)
 
@@ -104,8 +104,11 @@ printOp = do
   i <- getPos
   reserved "print"
   str <- option "" stringLiteral
-  a <- atom
-  return (SPrint i str a)
+  do
+    a <- atom
+    return (SPrint i str (Just a))
+    <|>
+    return (SPrint i str Nothing)
 
 binary :: String -> BinaryOp -> Assoc -> Operator String () Identity STerm
 binary s f = Ex.Infix (reservedOp s >> return (SBinaryOp NoPos f))
@@ -146,7 +149,7 @@ functionBinding = do
                     bs <- many1 multipleBinder
                     reservedOp ":"
                     ty <- typeP
-                    return (v, ty, concat (map (\(vs, ty') -> [(v', ty') | v' <- vs]) bs)) -- ver si hacemos el flatten en un helper
+                    return (v, ty, concatMap (\(vs, ty') -> [(v', ty') | v' <- vs]) bs) -- ver si hacemos el flatten en un helper
 
 -- | Fun parser
 lam :: P STerm
@@ -155,7 +158,7 @@ lam = do i <- getPos
          bs <- many1 multipleBinder
          reservedOp "->"
          t <- expr
-         return (SSugarLam i (concat (map (\(vs, ty') -> [(v', ty') | v' <- vs]) bs)) t) -- ver si hacemos el flatten en un helper
+         return (SSugarLam i (concatMap (\(vs, ty') -> [(v', ty') | v' <- vs]) bs) t) -- ver si hacemos el flatten en un helper
 
 -- | Nota el parser app también parsea un solo atom.
 app :: P STerm
@@ -189,8 +192,8 @@ fix = do
 -- | LetExp parser. 
 --   Parsea tanto el comun, como el sugar y el sugar recursivo
 letexp :: P STerm
-letexp = try commonLet
-  <|> try sugarLet
+letexp = try sugarLet
+  <|> try commonLet
   <|> sugarLetRec
 
 commonLet :: P STerm
@@ -242,17 +245,17 @@ noRecDecl :: P SDecl
 noRecDecl = do
     i <- getPos
     reserved "let"
-    (try (do
+    try (do
         (v, ty, bs) <- functionBinding
         reservedOp "="
         t <- expr
         return (SDecl i v ty bs t False))
       <|>
-      do 
+      do
         (v, ty) <- try binding <|> parens binding
         reservedOp "="
         t <- expr
-        return (SDecl i v ty [] t False))
+        return (SDecl i v ty [] t False)
 
 recDecl :: P SDecl
 recDecl = do
@@ -295,7 +298,7 @@ program = many sdecl
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
 declOrTm :: P (Either SDecl STerm)
-declOrTm =  try (Left <$> sdecl) <|> (Right <$> expr)
+declOrTm =  try (Right <$> expr) <|> (Left <$> sdecl)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada
 runP :: P a -> String -> String -> Either ParseError a
