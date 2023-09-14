@@ -242,7 +242,6 @@ handleCommand cmd = do
 
 compilePhrase ::  MonadFD4 m => String -> m ()
 compilePhrase x = do
-    printFD4 x
     dot <- parseIO "<interactive>" declOrTm x
     case dot of
       Left d  -> handleDecl d
