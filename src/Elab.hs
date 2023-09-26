@@ -17,7 +17,7 @@ module Elab ( elab, elabDecl, elabSDecl, elabSynTy ) where
 
 import Lang
 import Subst
-import MonadFD4 ( MonadFD4, failPosFD4, lookupSinTy, addSinTy, failFD4, printFD4 )
+import MonadFD4 ( MonadFD4, failPosFD4, lookupSinTy, addSinTy, failFD4 )
 import Helper
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn

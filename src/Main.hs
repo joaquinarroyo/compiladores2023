@@ -36,16 +36,16 @@ import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 
+import CEK ( seek )
+
 prompt :: String
 prompt = "FD4> "
 
-
-
 -- | Parser de banderas
-parseMode :: Parser (Mode,Bool)
+parseMode :: Parser (Mode, Bool)
 parseMode = (,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
-  -- <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
+      <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
   -- <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
   -- <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
@@ -60,7 +60,7 @@ parseMode = (,) <$>
    -- <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
-parseArgs :: Parser (Mode,Bool, [FilePath])
+parseArgs :: Parser (Mode, Bool, [FilePath])
 parseArgs = (\(a,b) c -> (a,b,c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
 
 main :: IO ()
@@ -71,9 +71,11 @@ main = execParser opts >>= go
      <> progDesc "Compilador de FD4"
      <> header "Compilador de FD4 de la materia Compiladores 2022" )
 
-    go :: (Mode,Bool,[FilePath]) -> IO ()
+    go :: (Mode, Bool, [FilePath]) -> IO ()
     go (Interactive,opt,files) =
               runOrFail (Conf opt Interactive) (runInputT defaultSettings (repl files))
+    go (InteractiveCEK,opt,files) =
+              runOrFail (Conf opt InteractiveCEK) (runInputT defaultSettings (repl files))
     go (m,opt, files) =
               runOrFail (Conf opt m) $ mapM_ compileFile files
 
@@ -160,6 +162,8 @@ handleDecl d = do
                     -- td' <- if opt then optimizeDecl td else return td
                     ed <- evalDecl td
                     addDecl ed
+                InteractiveCEK ->
+                    printFD4 "cek"
         where
           typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
           typecheckDecl (Decl p x ty t) = tcDecl (Decl p x ty (elab t))
@@ -174,8 +178,9 @@ data Command = Compile CompileForm
              | Help
              | Noop
 
-data CompileForm = CompileInteractive  String
-                 | CompileFile         String
+data CompileForm = CompileInteractive    String
+                 | CompileFile           String
+                 | CompileInteractiveCEK String
 
 data InteractiveCommand = Cmd [String] String (String -> Command) String
 
@@ -235,6 +240,7 @@ handleCommand cmd = do
                   do  case c of
                           CompileInteractive e -> compilePhrase e
                           CompileFile f        -> compileFile f
+                          CompileInteractiveCEK e -> compileCEKPhrase e 
                       return True
        Reload ->  eraseLastFileDecls >> (getLastFile >>= compileFile) >> return True
        PPrint e   -> printPhrase e >> return True
@@ -256,6 +262,25 @@ handleTerm t = do
          te <- eval tt
          ppte <- pp te
          printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
+
+---- CEK Compile -----
+compileCEKPhrase ::  MonadFD4 m => String -> m ()
+compileCEKPhrase x = do
+    dot <- parseIO "<interactive>" declOrTm x
+    case dot of
+      Left d  -> handleDecl d
+      Right t -> handleCEKTerm t
+
+handleCEKTerm ::  MonadFD4 m => STerm -> m ()
+handleCEKTerm t = do
+         t' <- elabSynTy t
+         let t'' = elab t'
+         s <- get
+         tt <- tc t'' (tyEnv s)
+         te <- seek tt
+         ppte <- pp te
+         printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
+----------------------
 
 printPhrase   :: MonadFD4 m => String -> m ()
 printPhrase x =
