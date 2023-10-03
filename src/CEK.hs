@@ -63,7 +63,7 @@ destroy v ((PrintFrame s):kont) = do
   printFD4 (s++show v)
   destroy v kont
 destroy (N i n) ((RBinFrame env op u):kont) = seek' u env (LBinFrame op (N i n):kont)
-destroy (N i (CNat n')) ((LBinFrame op (N _ (CNat n)):kont)) = destroy (N i (CNat $ semOp op n' n)) kont
+destroy (N i (CNat n')) ((LBinFrame op (N _ (CNat n)):kont)) = destroy (N i (CNat $ semOp op n n')) kont
 destroy (N _ (CNat 0)) ((IfZFrame env t e):kont) = seek' t env kont
 destroy (N _ _) ((IfZFrame env t e):kont) = seek' e env kont
 destroy (Clos c) ((KArg env t):kont) = seek' t env (ClosFrame c:kont)
