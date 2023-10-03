@@ -46,6 +46,7 @@ parseMode :: Parser (Mode, Bool)
 parseMode = (,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
       <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
+      <|> flag' CEK (long "cek" <> short 'c' <> help "Ejecutar en la CEK")
   -- <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
   -- <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
@@ -144,10 +145,8 @@ handleDecl d = do
           Nothing -> return ()
           Just decl -> 
               case m of
-                Interactive -> do
-                    (Decl p x ty tt) <- typecheckDecl decl
-                    te <- eval tt
-                    addDecl (Decl p x ty te)
+                Interactive -> hanldeInteractiveDecl decl
+                InteractiveCEK -> hanldeInteractiveDecl decl
                 Typecheck -> do
                     f <- getLastFile
                     printFD4 ("Chequeando tipos de "++f)
@@ -162,12 +161,18 @@ handleDecl d = do
                     -- td' <- if opt then optimizeDecl td else return td
                     ed <- evalDecl td
                     addDecl ed
-                InteractiveCEK ->
-                    printFD4 "cek"
+                CEK -> do
+                    td <- typecheckDecl decl
+                    ed <- evalCEKDecl td
+                    addDecl ed
         where
           typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
           typecheckDecl (Decl p x ty t) = tcDecl (Decl p x ty (elab t))
-
+          --
+          hanldeInteractiveDecl decl = do
+              (Decl p x ty tt) <- typecheckDecl decl
+              te <- eval tt
+              addDecl (Decl p x ty te)
 
 data Command = Compile CompileForm
              | PPrint String
@@ -180,7 +185,6 @@ data Command = Compile CompileForm
 
 data CompileForm = CompileInteractive    String
                  | CompileFile           String
-                 | CompileInteractiveCEK String
 
 data InteractiveCommand = Cmd [String] String (String -> Command) String
 
@@ -238,9 +242,13 @@ handleCommand cmd = do
                       return True
        Compile c ->
                   do  case c of
-                          CompileInteractive e -> compilePhrase e
-                          CompileFile f        -> compileFile f
-                          CompileInteractiveCEK e -> compileCEKPhrase e 
+                          CompileInteractive e -> 
+                                do
+                                  m <- getMode
+                                  case m of
+                                    Interactive -> compilePhrase e
+                                    InteractiveCEK -> compileCEKPhrase e 
+                          CompileFile f -> compileFile f
                       return True
        Reload ->  eraseLastFileDecls >> (getLastFile >>= compileFile) >> return True
        PPrint e   -> printPhrase e >> return True
@@ -262,25 +270,6 @@ handleTerm t = do
          te <- eval tt
          ppte <- pp te
          printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
-
----- CEK Compile -----
-compileCEKPhrase ::  MonadFD4 m => String -> m ()
-compileCEKPhrase x = do
-    dot <- parseIO "<interactive>" declOrTm x
-    case dot of
-      Left d  -> handleDecl d
-      Right t -> handleCEKTerm t
-
-handleCEKTerm ::  MonadFD4 m => STerm -> m ()
-handleCEKTerm t = do
-         t' <- elabSynTy t
-         let t'' = elab t'
-         s <- get
-         tt <- tc t'' (tyEnv s)
-         te <- seek tt
-         ppte <- pp te
-         printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
-----------------------
 
 printPhrase   :: MonadFD4 m => String -> m ()
 printPhrase x =
@@ -305,3 +294,31 @@ typeCheckPhrase x = do
          tt <- tc t' (tyEnv s)
          let ty = getTy tt
          printFD4 (ppTy ty)
+
+
+----- CEK Compile -----
+--
+compileCEKPhrase ::  MonadFD4 m => String -> m ()
+compileCEKPhrase x = do
+    dot <- parseIO "<interactive>" declOrTm x
+    case dot of
+      Left d  -> handleDecl d
+      Right t -> handleCEKTerm t
+
+--
+handleCEKTerm ::  MonadFD4 m => STerm -> m ()
+handleCEKTerm t = do
+         t' <- elabSynTy t
+         let t'' = elab t'
+         s <- get
+         tt <- tc t'' (tyEnv s)
+         te <- seek tt
+         ppte <- pp te
+         printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
+
+--
+evalCEKDecl :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
+evalCEKDecl (Decl p x ty e) = do
+    e' <- seek e
+    return (Decl p x ty e')
+----------------------

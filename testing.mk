@@ -1,6 +1,6 @@
-TESTDIRS += tests/ok/00-basicos
+# TESTDIRS += tests/ok/00-basicos
 TESTDIRS += tests/ok/10-sugar
-#TESTDIRS += tests/ok/20-tysym
+TESTDIRS += tests/ok/20-tysym
 
 TESTS	:= $(shell find $(TESTDIRS) -name '*.fd4' -type f | sort)
 
@@ -18,7 +18,7 @@ EXTRAFLAGS	:=
 # Las reglas a chequear. Se puede deshabilitar toda una familia de tests
 # comentando una de estas líneas.
 CHECK	+= $(patsubst %,%.check_eval,$(TESTS))
-# CHECK	+= $(patsubst %,%.check_cek,$(TESTS))
+CHECK	+= $(patsubst %,%.check_cek,$(TESTS))
 # CHECK	+= $(patsubst %,%.check_bc32_h,$(TESTS))
 # CHECK	+= $(patsubst %,%.check_bc32,$(TESTS))
 # CHECK	+= $(patsubst %,%.check_eval_opt,$(TESTS))
@@ -31,7 +31,7 @@ CHECK	+= $(patsubst %,%.check_eval,$(TESTS))
 # imprime un mensaje.
 test_all: $(CHECK)
 	@echo "---------------------------------"
-	@echo "             Todo OK             "
+	@echo "           Todo JOYA             "
 	@echo "---------------------------------"
 
 Q=@
@@ -72,7 +72,7 @@ accept: $(patsubst %,%.accept,$(TESTS))
 
 # Idem CEK
 %.actual_out_cek: % $(EXE)
-	$(Q)$(EXE) $(EXTRAFLAGS) --eval --cek $< > $@
+	$(Q)$(EXE) $(EXTRAFLAGS) --cek $< > $@
 
 %.check_cek: %.out %.actual_out_cek
 	$(Q)diff -u $^

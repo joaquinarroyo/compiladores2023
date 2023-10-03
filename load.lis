@@ -1,2 +1,2 @@
-type Integer = Nat 
-type Fun = Integer -> Integer
+let y : Nat = 4
+let f(x:Nat):Nat = x

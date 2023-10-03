@@ -37,12 +37,15 @@ data Mode =
   | Typecheck
   | Eval
   | InteractiveCEK
+  | CEK
   -- | Bytecompile
   -- | RunVM
   -- | CC
   -- | Canon
   -- | Assembler
   -- | Build
+  deriving Show
+
 data Conf = Conf {
     opt :: Bool,          --  ^ True, si estan habilitadas las optimizaciones.
     modo :: Mode
