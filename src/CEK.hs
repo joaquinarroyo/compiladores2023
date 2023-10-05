@@ -35,7 +35,8 @@ data Frame =
 seek :: MonadFD4 m => TTerm -> m TTerm
 seek t  = do
   v <- seek' t [] []
-  return (valCEK2TTerm v)
+  v' <- valCEK2TTerm v
+  return v'
 
 --
 seek' :: MonadFD4 m => TTerm -> Env -> [Frame] -> m (ValCEK (Pos,Ty) Var)
@@ -72,8 +73,86 @@ destroy v (ClosFrame c@(ClosFix i env (n1, ty1) (n2, ty2) (Sc2 t)):kont) = seek'
   where f = Clos c
 
 --
-valCEK2TTerm :: ValCEK (Pos,Ty) Var -> TTerm 
-valCEK2TTerm (N i c) = Const i c
-valCEK2TTerm (Clos (ClosFun i env (n, ty) scope)) = Lam i n ty scope
-valCEK2TTerm (Clos (ClosFix i env (n1, ty1) (n2, ty2) scope)) = Fix i n1 ty1 n2 ty2 scope 
+valCEK2TTerm :: MonadFD4 m => ValCEK (Pos,Ty) Var -> m TTerm 
+valCEK2TTerm (N i c) = return $ Const i c
+valCEK2TTerm (Clos (ClosFun i env (n, ty) scope)) = do
+  scope' <- replaceEnvScope scope (length env) env
+  return $ Lam i n ty scope'
+valCEK2TTerm (Clos (ClosFix i env (n1, ty1) (n2, ty2) scope)) = do
+  scope' <- replaceEnvScope2 scope (length env) env
+  return $ Fix i n1 ty1 n2 ty2 scope'
+
+--
+replaceEnvScope :: MonadFD4 m => Scope (Pos,Ty) Var -> Int -> Env -> m (Scope (Pos,Ty) Var)
+replaceEnvScope (Sc1 (Lam i n ty scope)) c env = do
+  scope' <- replaceEnvScope scope (c+1) env
+  return $ Sc1 $ Lam i n ty scope'
+replaceEnvScope (Sc1 t) c env = do
+  t' <- replaceEnv' t c env
+  return $ Sc1 t'
+
+--
+replaceEnvScope2 :: MonadFD4 m => Scope2 (Pos,Ty) Var -> Int -> Env -> m (Scope2 (Pos,Ty) Var)
+replaceEnvScope2 (Sc2 (Fix i n1 ty1 n2 ty2 scope)) c env = do
+  scope' <- replaceEnvScope2 scope (c+2) env
+  return $ Sc2 $ Fix i n1 ty1 n2 ty2 scope'
+replaceEnvScope2 (Sc2 t) c env = do
+  t' <- replaceEnv' t c env
+  return $ Sc2 t'
+
+
+--
+replaceEnv' :: MonadFD4 m => TTerm -> Int -> Env -> m TTerm
+replaceEnv' t c [] = return t 
+replaceEnv' v@(V _ (Bound i)) c env | c-i < length env = do
+                                      v' <- valCEK2TTerm $ env'!!(c-i)
+                                      return v' 
+                                    | otherwise = return $ v
+    where
+      env' = reverse env
+replaceEnv' (V _ (Free n)) _ _ = failFD4 "error"
+replaceEnv' v@(V _ (Global n)) _ _= failFD4 "error"
+replaceEnv' c@(Const _ _) _ _ = return c
+replaceEnv' (Lam i n ty scope) c env = do
+  scope' <- replaceEnvScope scope (c+1) env
+  return $ Lam i n ty scope'
+replaceEnv' (App i t1 t2) c env = do
+  t1' <- replaceEnv' t1 c env
+  t2' <- replaceEnv' t2 c env
+  return $ App i t1' t2'
+replaceEnv' (Print i s t) c env = do
+  t' <- replaceEnv' t c env
+  return $ Print i s t'
+replaceEnv' (BinaryOp i op t1 t2) c env = do
+  t1' <- replaceEnv' t1 c env
+  t2' <- replaceEnv' t2 c env
+  return $ BinaryOp i op t1' t2'
+replaceEnv' (Fix i n1 ty1 n2 ty2 scope) c env = do
+  scope' <- replaceEnvScope2 scope (c+2) env
+  return $ Fix i n1 ty1 n2 ty2 scope'
+replaceEnv' (IfZ i t1 t2 t3) c env = do
+  t1' <- replaceEnv' t1 c env
+  t2' <- replaceEnv' t2 c env
+  t3' <- replaceEnv' t3 c env
+  return $ IfZ i t1' t2' t3'
+{-
+replaceEnv' (IfZ i t1 t2 t3) c env = do
+  t1' <- replaceEnv' t1 c env
+  case t1' of
+    (Const _ (CNat 0)) -> do
+      t2' <- replaceEnv' t2 c env
+      return t2'
+    (Const _ _) -> do
+      t3' <- replaceEnv' t3 c env
+      return t3'
+    _ -> do
+      t2' <- replaceEnv' t2 c env
+      t3' <- replaceEnv' t3 c env
+      return $ IfZ i t1' t2' t3'
+-}
+replaceEnv' (Let i n ty t scope) c env = do
+  t' <- replaceEnv' t c env
+  scope' <- replaceEnvScope scope (c+1) env
+  return $ Let i n ty t' scope' 
+
 

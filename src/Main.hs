@@ -70,7 +70,7 @@ main = execParser opts >>= go
     opts = info (parseArgs <**> helper)
       ( fullDesc
      <> progDesc "Compilador de FD4"
-     <> header "Compilador de FD4 de la materia Compiladores 2022" )
+     <> header "Compilador de FD4 de la materia Compiladores 2023" )
 
     go :: (Mode, Bool, [FilePath]) -> IO ()
     go (Interactive,opt,files) =
@@ -94,8 +94,10 @@ repl args = do
        lift $ setInter True
        lift $ catchErrors $ mapM_ compileFile args
        s <- lift get
+       m <- lift getMode
        when (inter s) $ liftIO $ putStrLn
-         (  "Entorno interactivo para FD4.\n"
+         (  "Entorno interactivo para FD4. \n"
+         ++ "Modo: " ++ show m ++ "\n"
          ++ "Escriba :? para recibir ayuda.")
        loop
   where loop = do
