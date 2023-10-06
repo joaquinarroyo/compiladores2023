@@ -35,7 +35,7 @@ data Frame =
   | RBinFrame Env BinaryOp TTerm
   | LBinFrame BinaryOp (ValCEK Info Var)
   | PrintFrame String
-  | LetFrame Env Name Ty TTerm (Scope Info Var)
+  | LetFrame Env (Scope Info Var)
   deriving Show
 
 -- | Funcion seek expuesta, llamada desde el main. Evalua un termino en la maquina CEK y devuelve un termino.
@@ -62,7 +62,7 @@ seek' (Lam i n ty scope) env kont =
   destroy (Clos $ ClosFun i env (n, ty) scope) kont
 seek' (Fix i n1 ty1 n2 ty2 scope) env kont =
   destroy (Clos $ ClosFix i env (n1, ty1) (n2, ty2) scope) kont
-seek' (Let i n ty t scope) env kont = seek' t env (LetFrame env n ty t scope:kont)
+seek' (Let i n ty t scope) env kont = seek' t env (LetFrame env scope:kont)
 
 -- | Funcion destroy de la maquina CEK
 destroy :: MonadFD4 m => ValCEK Info Var -> [Frame] -> m (ValCEK (Pos, Ty) Var)
@@ -76,10 +76,10 @@ destroy (N i (CNat n')) ((LBinFrame op (N _ (CNat n)):kont)) = destroy (N i (CNa
 destroy (N _ (CNat 0)) ((IfZFrame env t e):kont) = seek' t env kont
 destroy (N _ _) ((IfZFrame env t e):kont) = seek' e env kont
 destroy (Clos c) ((KArg env t):kont) = seek' t env (ClosFrame c:kont)
-destroy v (ClosFrame (ClosFun i env (n, ty) (Sc1 t)):kont) = seek' t (v:env) kont
-destroy v (ClosFrame c@(ClosFix i env (n1, ty1) (n2, ty2) (Sc2 t)):kont) = seek' t (v:f:env) kont
+destroy v (ClosFrame (ClosFun _ env _ (Sc1 t)):kont) = seek' t (v:env) kont
+destroy v (ClosFrame c@(ClosFix _ env _ _ (Sc2 t)):kont) = seek' t (v:f:env) kont
   where f = Clos c
-destroy v (LetFrame env n ty t (Sc1 scope):kont) = seek' t (v:env) kont
+destroy v (LetFrame env (Sc1 scope):kont) = seek' scope (v:env) kont
 
 -- | Funcion auxiliar que convierte un valor de la maquina CEK a un termino
 valCEK2TTerm :: MonadFD4 m => ValCEK Info Var -> m TTerm 
@@ -149,4 +149,4 @@ replaceEnv' (IfZ i t1 t2 t3) c env = do
 replaceEnv' (Let i n ty t scope) c env = do
   t' <- replaceEnv' t c env
   scope' <- replaceEnvScope scope (c+1) env
-  return $ Let i n ty t' scope' 
+  return $ Let i n ty t' scope'
