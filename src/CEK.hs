@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-overlapping-patterns #-}
-module CEK where
+module CEK ( seek ) where
 
 import Common (Pos)
 import Lang 
@@ -46,7 +46,7 @@ seek t  = do
   return v'
  
 -- | Funcion seek de la maquina CEK
-seek' :: MonadFD4 m => TTerm -> Env -> [Frame] -> m (ValCEK (Pos, Ty) Var)
+seek' :: MonadFD4 m => TTerm -> Env -> [Frame] -> m (ValCEK Info Var)
 seek' (Print _ s t) env kont = seek' t env (PrintFrame s:kont)
 seek' (BinaryOp _ op t1 t2) env kont = seek' t1 env (RBinFrame env op t2:kont)
 seek' (IfZ _ t1 t2 t3) env kont = seek' t1 env (IfZFrame env t2 t3:kont)
@@ -56,7 +56,7 @@ seek' (V _ (Global n)) env kont = do
   mt <- lookupDecl n
   case mt of
     Just t -> seek' t env kont
-    Nothing -> failFD4 "error"
+    Nothing -> failFD4 "seek: no deberia llegar una variable global que no este en el entorno"
 seek' (Const i n) env kont = destroy (N i n) kont
 seek' (Lam i n ty scope) env kont =
   destroy (Clos $ ClosFun i env (n, ty) scope) kont
@@ -65,7 +65,7 @@ seek' (Fix i n1 ty1 n2 ty2 scope) env kont =
 seek' (Let i n ty t scope) env kont = seek' t env (LetFrame env scope:kont)
 
 -- | Funcion destroy de la maquina CEK
-destroy :: MonadFD4 m => ValCEK Info Var -> [Frame] -> m (ValCEK (Pos, Ty) Var)
+destroy :: MonadFD4 m => ValCEK Info Var -> [Frame] -> m (ValCEK Info Var)
 destroy v [] = do
   return v
 destroy v ((PrintFrame s):kont) = do
@@ -92,7 +92,7 @@ valCEK2TTerm (Clos (ClosFix i env (n1, ty1) (n2, ty2) scope)) = do
   return $ Fix i n1 ty1 n2 ty2 scope'
 
 -- | Funcion que reemplaza los valores que quedaron en el env en sus variables correspondientes en el scope
-replaceEnvScope :: MonadFD4 m => Scope Info Var -> Int -> Env -> m (Scope (Pos, Ty) Var)
+replaceEnvScope :: MonadFD4 m => Scope Info Var -> Int -> Env -> m (Scope Info Var)
 replaceEnvScope (Sc1 (Lam i n ty scope)) c env = do
   scope' <- replaceEnvScope scope (c+1) env
   return $ Sc1 $ Lam i n ty scope'
@@ -101,7 +101,7 @@ replaceEnvScope (Sc1 t) c env = do
   return $ Sc1 t'
 
 -- | Funcion que reemplaza los valores que quedaron en el env en sus variables correspondientes en el scope2
-replaceEnvScope2 :: MonadFD4 m => Scope2 Info Var -> Int -> Env -> m (Scope2 (Pos, Ty) Var)
+replaceEnvScope2 :: MonadFD4 m => Scope2 Info Var -> Int -> Env -> m (Scope2 Info Var)
 replaceEnvScope2 (Sc2 (Fix i n1 ty1 n2 ty2 scope)) c env = do
   scope' <- replaceEnvScope2 scope (c+2) env
   return $ Sc2 $ Fix i n1 ty1 n2 ty2 scope'

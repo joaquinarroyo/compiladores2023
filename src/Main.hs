@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 {-|
 Module      : Main
@@ -47,8 +48,8 @@ parseMode = (,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
       <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
       <|> flag' CEK (long "cek" <> short 'c' <> help "Ejecutar en la CEK")
-  -- <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
-  -- <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
+      <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
+      <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
       <|> flag Eval        Eval        (long "eval" <> short 'e' <> help "Evaluar programa")
   -- <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
@@ -77,7 +78,7 @@ main = execParser opts >>= go
               runOrFail (Conf opt Interactive) (runInputT defaultSettings (repl files))
     go (InteractiveCEK,opt,files) =
               runOrFail (Conf opt InteractiveCEK) (runInputT defaultSettings (repl files))
-    go (m,opt, files) =
+    go (m,opt,files) =
               runOrFail (Conf opt m) $ mapM_ compileFile files
 
 runOrFail :: Conf -> FD4 a -> IO a
