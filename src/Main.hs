@@ -19,10 +19,11 @@ import Control.Monad.Catch (MonadMask)
 --import Control.Monad
 import Control.Monad.Trans
 import Data.List (nub, isPrefixOf, intercalate )
+import Data.List.Split ( splitOn )
 import Data.Char ( isSpace )
 import Control.Exception ( catch , IOException )
 import System.IO ( hPrint, stderr, hPutStrLn )
-import Data.Maybe ( fromMaybe )
+import Data.Maybe ( fromMaybe, isNothing )
 
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
@@ -38,6 +39,7 @@ import MonadFD4
 import TypeChecker ( tc, tcDecl )
 
 import CEK ( seek )
+import Bytecompile ( translateDecl, bc, bcWrite, showOps, bcRead, runBC )
 
 prompt :: String
 prompt = "FD4> "
@@ -78,6 +80,8 @@ main = execParser opts >>= go
               runOrFail (Conf opt Interactive) (runInputT defaultSettings (repl files))
     go (InteractiveCEK,opt,files) =
               runOrFail (Conf opt InteractiveCEK) (runInputT defaultSettings (repl files))
+    go (RunVM,opt,files) =
+              runOrFail (Conf opt RunVM) $ runVM $ files!!0
     go (m,opt,files) =
               runOrFail (Conf opt m) $ mapM_ compileFile files
 
@@ -123,12 +127,25 @@ loadFile f = do
 
 compileFile ::  MonadFD4 m => FilePath -> m ()
 compileFile f = do
+    m <- getMode
     i <- getInter
     setInter False
-    when i $ printFD4 ("Abriendo "++f++"...")
     decls <- loadFile f
-    mapM_ handleDecl decls
+    case m of
+      Bytecompile -> do
+        printFD4 ("Abriendo modo Bytecompile "++ f)
+        mdecls <- mapM elabSDecl decls
+        term <- translateDecl (filter (\x -> not $ isNothing x) mdecls)
+        bytecode <- bc (elab term)
+        printFD4 $ show $ showOps bytecode
+        liftIO $ bcWrite bytecode fout
+        printFD4 ("Compilacion exitosa a " ++ fout)
+      _ -> do 
+        printFD4 ("Abriendo modo standard "++ f)
+        mapM_ handleDecl decls
     setInter i
+    where
+      fout = ((splitOn "." f)!!0) ++ ".bc"
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of
@@ -234,7 +251,7 @@ helpTxt cs
 
 -- | 'handleCommand' interpreta un comando y devuelve un booleano
 -- indicando si se debe salir del programa o no.
-handleCommand ::  MonadFD4 m => Command  -> m Bool
+handleCommand ::  MonadFD4 m => Command -> m Bool
 handleCommand cmd = do
    s@GlEnv {..} <- get
    case cmd of
@@ -324,4 +341,9 @@ evalCEKDecl :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
 evalCEKDecl (Decl p x ty e) = do
     e' <- seek e
     return (Decl p x ty e')
+  
 ----------------------
+runVM :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
+runVM f = do
+    b <- liftIO $ bcRead f
+    runBC b

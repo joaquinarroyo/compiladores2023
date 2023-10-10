@@ -1,0 +1,4 @@
+let x:Nat = 4
+let y:Nat = 5
+let f(x y:Nat):Nat = x+y 
+let z : Nat = print "x+y=" (f x y)
