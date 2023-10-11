@@ -54,7 +54,6 @@ instance Eq Ty where
   SynTy n1 == SynTy n2 = n1 == n2
   _ == _ = False
 
-
 type Name = String
 
 type STerm = STm Pos Ty Name -- ^ 'STm' tiene 'Name's como variables ligadas y libres y globales, guarda posición  
@@ -98,7 +97,6 @@ data Tm info var =
   | IfZ info (Tm info var) (Tm info var) (Tm info var)
   | Let info Name Ty (Tm info var) (Scope info var)
   deriving (Show, Functor)
-
 
 type Term = Tm Pos Var       -- ^ 'Tm' con índices de De Bruijn como variables ligadas, y nombres para libres y globales, guarda posición
 type TTerm = Tm (Pos,Ty) Var -- ^ 'Tm' con índices de De Bruijn como variables ligadas, y nombres para libres y globales, guarda posición y tipo

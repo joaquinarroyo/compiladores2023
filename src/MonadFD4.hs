@@ -4,16 +4,16 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
 
-{-|
-Module      : MonadFD4
-Description : Mónada con soporte para estado, errores, e IO.
-Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
-License     : GPL-3
-Maintainer  : mauro@fceia.unr.edu.ar
-Stability   : experimental
+{-
+  Module      : MonadFD4
+  Description : Mónada con soporte para estado, errores, e IO.
+  Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
+  License     : GPL-3
+  Maintainer  : mauro@fceia.unr.edu.ar
+  Stability   : experimental
 
-Definimos la clase de mónadas 'MonadFD4' que abstrae las mónadas con soporte para estado, errores e IO,
-y la mónada 'FD4' que provee una instancia de esta clase.
+  Definimos la clase de mónadas 'MonadFD4' que abstrae las mónadas con soporte para estado, errores e IO,
+  y la mónada 'FD4' que provee una instancia de esta clase.
 -}
 
 module MonadFD4 (
@@ -95,29 +95,30 @@ addDecl d = modify (\s -> s { glb = d : glb s, cantDecl = cantDecl s + 1 })
 
 eraseLastFileDecls :: MonadFD4 m => m ()
 eraseLastFileDecls = do
-      s <- get
-      let n = cantDecl s
-          (_,rem) = splitAt n (glb s)
-      modify (\s -> s {glb = rem, cantDecl = 0})
+  s <- get
+  let n = cantDecl s
+    (_,rem) = splitAt n (glb s)
+  modify (\s -> s {glb = rem, cantDecl = 0})
 
 lookupDecl :: MonadFD4 m => Name -> m (Maybe TTerm)
 lookupDecl nm = do
-     s <- get
-     case filter (hasName nm) (glb s) of
-       (Decl { declBody=e }):_ -> return (Just e)
-       [] -> return Nothing
-   where hasName :: Name -> Decl a -> Bool
-         hasName nm (Decl { declName = nm' }) = nm == nm'
+  s <- get
+  case filter (hasName nm) (glb s) of
+    (Decl { declBody=e }):_ -> return (Just e)
+    [] -> return Nothing
+  where 
+    hasName :: Name -> Decl a -> Bool
+    hasName nm (Decl { declName = nm' }) = nm == nm'
 
 lookupTy :: MonadFD4 m => Name -> m (Maybe Ty)
 lookupTy nm = do
-      s <- get
-      return $ lookup nm (tyEnv s)
+  s <- get
+  return $ lookup nm (tyEnv s)
 
 lookupSinTy :: MonadFD4 m => Name -> m (Maybe Ty)
 lookupSinTy nm = do
-      s <- get
-      return $ lookup nm (tySinEnv s)
+  s <- get
+  return $ lookup nm (tySinEnv s)
 
 addSinTy :: MonadFD4 m => SDecl -> m ()
 addSinTy d = modify (\s -> s { tysin = d : tysin s })

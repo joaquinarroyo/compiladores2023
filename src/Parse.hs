@@ -128,55 +128,60 @@ atom =     (flip SConst <$> const <*> getPos)
 
 -- | Parsea un par (variable : tipo)
 binding :: P (Name, Ty)
-binding = do v <- var
-             reservedOp ":"
-             ty <- typeP
-             return (v, ty)
+binding = do 
+  v <- var
+  reservedOp ":"
+  ty <- typeP
+  return (v, ty)
 
 -- | Parsea un multipleBinder (x1 ... xn : t)
 multipleBinder :: P ([Name], Ty)
-multipleBinder = parens (do
-                          vs <- many var
-                          reservedOp ":"
-                          ty <- typeP
-                          return (vs, ty))
+multipleBinder = parens $
+  do
+    vs <- many var
+    reservedOp ":"
+    ty <- typeP
+    return (vs, ty)
 
 -- | Parsea una declaracion de una funcion.
 --   Puede tener o no multiplesBinders
 functionBinding :: P (Name, Ty, [(Name, Ty)])
 functionBinding = do
-                    v <- var
-                    bs <- many1 multipleBinder
-                    reservedOp ":"
-                    ty <- typeP
-                    return (v, ty, concatMap (\(vs, ty') -> [(v', ty') | v' <- vs]) bs) -- ver si hacemos el flatten en un helper
+  v <- var
+  bs <- many1 multipleBinder
+  reservedOp ":"
+  ty <- typeP
+  return (v, ty, concatMap (\(vs, ty') -> [(v', ty') | v' <- vs]) bs)
 
 -- | Fun parser
 lam :: P STerm
-lam = do i <- getPos
-         reserved "fun"
-         bs <- many1 multipleBinder
-         reservedOp "->"
-         t <- expr
-         return (SSugarLam i (concatMap (\(vs, ty') -> [(v', ty') | v' <- vs]) bs) t) -- ver si hacemos el flatten en un helper
+lam = do 
+  i <- getPos
+  reserved "fun"
+  bs <- many1 multipleBinder
+  reservedOp "->"
+  t <- expr
+  return (SSugarLam i (concatMap (\(vs, ty') -> [(v', ty') | v' <- vs]) bs) t)
 
 -- | Nota el parser app también parsea un solo atom.
 app :: P STerm
-app = do i <- getPos
-         f <- atom
-         args <- many atom
-         return (foldl (SApp i) f args)
+app = do 
+  i <- getPos
+  f <- atom
+  args <- many atom
+  return (foldl (SApp i) f args)
 
 -- | Ifz parser
 ifz :: P STerm
-ifz = do i <- getPos
-         reserved "ifz"
-         c <- expr
-         reserved "then"
-         t <- expr
-         reserved "else"
-         e <- expr
-         return (SIfZ i c t e)
+ifz = do 
+  i <- getPos
+  reserved "ifz"
+  c <- expr
+  reserved "then"
+  t <- expr
+  reserved "else"
+  e <- expr
+  return (SIfZ i c t e)
 
 -- | Fix parser
 fix :: P STerm
@@ -245,7 +250,8 @@ noRecDecl :: P SDecl
 noRecDecl = do
     i <- getPos
     reserved "let"
-    try (do
+    try (
+      do
         (v, ty, bs) <- functionBinding
         reservedOp "="
         t <- expr
@@ -259,13 +265,13 @@ noRecDecl = do
 
 recDecl :: P SDecl
 recDecl = do
-     i <- getPos
-     reserved "let"
-     reserved "rec"
-     (v, ty, bs) <- functionBinding
-     reservedOp "="
-     t <- expr
-     return (SDecl i v ty bs t True)
+  i <- getPos
+  reserved "let"
+  reserved "rec"
+  (v, ty, bs) <- functionBinding
+  reservedOp "="
+  t <- expr
+  return (SDecl i v ty bs t True)
 
 -- | Parser de sinonimos de tipos
 stype :: P SDecl
@@ -278,17 +284,18 @@ stype = do
   case ty of
     ts@(SynTy refTy) -> return (IndirectTypeDecl p n ts)
     (NatTy _) -> return (DirectTypeDecl p n (NatTy (Just n)))
-    f@(FunTy a b _) -> case checkDirect f of
-                        False -> return (DirectTypeDecl p n (FunTy a b (Just n)))
-                        True -> return (IndirectTypeDecl p n (FunTy a b (Just n)))
-    where
-      -- Funcion para chequear si un tipo funcion esta formado por sinonimos
-      checkDirect (FunTy (SynTy _) _ _) = True
-      checkDirect (FunTy _ (SynTy _) _) = True
-      checkDirect (FunTy f1@(FunTy {}) f2@(FunTy {}) _) = checkDirect f1 && checkDirect f2
-      checkDirect (FunTy f1@(FunTy {}) _ _) = checkDirect f1
-      checkDirect (FunTy _ f2@(FunTy {}) _) = checkDirect f2
-      checkDirect _ = False
+    f@(FunTy a b _) -> 
+      case checkDirect f of
+        False -> return (DirectTypeDecl p n (FunTy a b (Just n)))
+        True -> return (IndirectTypeDecl p n (FunTy a b (Just n)))
+  where
+    -- Funcion para chequear si un tipo funcion esta formado por sinonimos
+    checkDirect (FunTy (SynTy _) _ _) = True
+    checkDirect (FunTy _ (SynTy _) _) = True
+    checkDirect (FunTy f1@(FunTy {}) f2@(FunTy {}) _) = checkDirect f1 && checkDirect f2
+    checkDirect (FunTy f1@(FunTy {}) _ _) = checkDirect f1
+    checkDirect (FunTy _ f2@(FunTy {}) _) = checkDirect f2
+    checkDirect _ = False
 
 
 -- | Parser de programas (listas de declaraciones) 
@@ -306,9 +313,10 @@ runP p s filename = runParser (whiteSpace *> p <* eof) () filename s
 
 --para debugging en uso interactivo (ghci)
 parse :: String -> STerm
-parse s = case runP expr s "" of
-            Right t -> t
-            Left e -> error ("no parse: " ++ show s)
+parse s = 
+  case runP expr s "" of
+    Right t -> t
+    Left e -> error ("no parse: " ++ show s)
 
 
 

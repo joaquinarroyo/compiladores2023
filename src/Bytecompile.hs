@@ -1,16 +1,17 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-{-|
-Module      : Bytecompile
-Description : Compila a bytecode. Ejecuta bytecode.
-Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
-License     : GPL-3
-Maintainer  : mauro@fceia.unr.edu.ar
-Stability   : experimental
 
-Este módulo permite compilar módulos a la Macchina. También provee
-una implementación de la Macchina para ejecutar el bytecode.
+{-
+  Module      : Bytecompile
+  Description : Compila a bytecode. Ejecuta bytecode.
+  Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2023.
+  License     : GPL-3
+  Maintainer  : mauro@fceia.unr.edu.ar
+  Stability   : experimental
+
+  Este módulo permite compilar módulos a la Macchina. También provee
+  una implementación de la Macchina para ejecutar el bytecode.
 -}
 module Bytecompile
   (Bytecode, runBC, bcWrite, bcRead, showBC, bc, translateDecl, showOps )
@@ -26,8 +27,6 @@ import Data.Binary.Get ( getWord32le, isEmpty )
 
 import Data.List (intercalate)
 import Data.Char
-
-import Elab
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -77,6 +76,8 @@ pattern PRINTN   = 14
 pattern JUMP     = 15
 -- |
 pattern IFZ      = 16
+pattern THEN     = 17
+pattern ELSE     = 18
 
 --función util para debugging: muestra el Bytecode de forma más legible.
 showOps :: Bytecode -> [String]
@@ -98,13 +99,11 @@ showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
                            in ("PRINT " ++ show (bc2string msg)) : showOps rest
 showOps (PRINTN:xs)      = "PRINTN" : showOps xs
 showOps (ADD:xs)         = "ADD" : showOps xs
+showOps (IFZ:i:xs)       = ("IFZ len=" ++ show i) : showOps xs
 showOps (x:xs)           = show x : showOps xs
 
 showBC :: Bytecode -> String
 showBC = intercalate "; " . showOps
-
-bcc :: MonadFD4 m => TTerm -> m Bytecode
-bcc t = failFD4 "implementame!"
 
 -- ord/chr devuelven los codepoints unicode, o en otras palabras
 -- la codificación UTF-32 del caracter.
@@ -113,9 +112,6 @@ string2bc = map ord
 
 bc2string :: Bytecode -> String
 bc2string = map chr
-
--- bytecompileModule :: MonadFD4 m => Module -> m Bytecode
--- bytecompileModule m = failFD4 "implementame!"
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo
 bcWrite :: Bytecode -> FilePath -> IO ()
@@ -136,39 +132,38 @@ bc t = do
   return $ t' ++ [STOP]
 
 bc' :: MonadFD4 m => Term -> m Bytecode
-bc' (V _ (Bound i)) = return (ACCESS:i:[])
-bc' (V _ (Free n)) = failFD4 "Free"
-bc' (Const _ (CNat i)) = return $ (CONST:i:[])
-bc' (Lam _ _ _ (Sc1 t)) = do
-  t' <- bc' t
-  return $ [FUNCTION] ++ [length t'] ++ t' ++ [RETURN]
-bc' (App _ t1 t2) = do
-  t1' <- bc' t1
-  t2' <- bc' t2
-  return $ t1' ++ t2' ++ [CALL]
-bc' (Print _ s t) = do
-  t' <- bc' t
-  return $ [PRINT] ++ s' ++ [NULL] ++ t'
-  where
-    s' = string2bc s
-bc' (BinaryOp _ op t1 t2) = do
-  t1' <- bc' t1
-  t2' <- bc' t2
-  case op of
-    Add -> return $ t1' ++ t2' ++ [ADD]
-    Sub -> return $ t1' ++ t2' ++ [SUB]
-bc' (Fix _ _ _ _ _ (Sc2 t)) = do
-  t' <- bc' t
-  return $ [FUNCTION] ++ [length t'] ++ t' ++ [RETURN] ++ [FIX]
-bc' (IfZ _ t1 t2 t3) = do
-  t1' <- bc' t1
-  t2' <- bc' t2
-  t3' <- bc' t3
-  return $ [IFZ] ++ t1' ++ [length t2'] ++ t2' ++ t3'
-bc' (Let _ n ty t1 (Sc1 t2)) = do
-  t1' <- bc' t1
-  t2' <- bc' t2
-  return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
+bc' t = case t of
+  (V _ (Bound i))         -> return (ACCESS:i:[])
+  (V _ (Free n))          -> failFD4 "bc: Free"
+  (Const _ (CNat i))      -> return $ (CONST:i:[])
+  (Lam _ _ _ (Sc1 t))     -> do
+    t' <- bc' t
+    return $ [FUNCTION, length t'] ++ t' ++ [RETURN]
+  (App _ t1 t2)           -> do
+    t1' <- bc' t1
+    t2' <- bc' t2
+    return $ t1' ++ t2' ++ [CALL]
+  (Print _ s t)           -> do
+    t' <- bc' t
+    return $ [PRINT, string2bc s, NULL] ++ t' 
+  (BinaryOp _ op t1 t2)   -> do
+    t1' <- bc' t1
+    t2' <- bc' t2
+    case op of
+      Add -> return $ t1' ++ t2' ++ [ADD]
+      Sub -> return $ t1' ++ t2' ++ [SUB]
+  (Fix _ _ _ _ _ (Sc2 t)) -> do
+    t' <- bc' t
+    return $ [FUNCTION, length t'] ++ t' ++ [RETURN, FIX]
+  (IfZ _ t1 t2 t3)        -> do
+    t1' <- bc' t1
+    t2' <- bc' t2
+    t3' <- bc' t3
+    return $ [IFZ, length t1'] ++ t1' ++ [THEN, length t2'] ++ t2' ++ [ELSE, length t3'] ++ t3'
+  (Let _ n ty t1 (Sc1 t2)) -> do
+    t1' <- bc' t1
+    t2' <- bc' t2
+    return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
 
 -- | 
 data ValBytecode =
@@ -182,45 +177,45 @@ instance Show ValBytecode where
   show (RA _ b) = show $ showOps b
 
 type Env = [ValBytecode]
+type Stack = [ValBytecode]
+
 
 runBC :: MonadFD4 m => Bytecode -> m ()
 runBC b = runBC' b [] [] 
 
-runBC' :: MonadFD4 m => Bytecode -> Env -> [ValBytecode] -> m ()
-runBC' (RETURN:_) _ (v:(RA e c):stack) = runBC' c e (v:stack)  
-runBC' (CONST:i:xs) env stack = runBC' xs env ((I i):stack)
-runBC' (ACCESS:i:xs) env stack = runBC' xs env (env!!i:stack)
-runBC' (FUNCTION:i:xs) env stack = runBC' drop' env (Fun env take':stack)
-  where
-    drop' = drop (i+1) xs
-    take' = take (i+1) xs
-runBC' (CALL:xs) env (v:(Fun ef cf):stack) = runBC' cf (v:ef) (RA env xs:stack)
-runBC' (ADD:xs) env ((I i1):(I i2):stack) = runBC' xs env ((I $ i1 + i2):stack) 
-runBC' (SUB:xs) env ((I i1):(I i2):stack) | i1 > i2 = runBC' xs env ((I $ i1 - i2):stack)
-                                          | otherwise = runBC' xs env ((I 0):stack) 
-runBC' (FIX:xs) env stack = failFD4 "Implementar: FIX"
-runBC' (STOP:xs) env (v:stack) = do
-  printFD4 $ show v
-  return () -- 
-runBC' (JUMP:i:xs) env stack = runBC' (drop i xs) env stack -- chequear
-runBC' (SHIFT:xs) env (v:stack) = runBC' xs (v:env) stack 
-runBC' (DROP:xs) (v:env) stack = runBC' xs env stack  
-runBC' (PRINT:xs) env stack = do
+runBC' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
+runBC' (RETURN:_) _ (v:(RA e c):stack)      = runBC' c e (v:stack)  
+runBC' (CONST:i:xs) env stack               = runBC' xs env ((I i):stack)
+runBC' (ACCESS:i:xs) env stack              = runBC' xs env (env!!i:stack)
+runBC' (FUNCTION:i:xs) env stack            = let drop' = drop (i+1) xs
+                                                  take' = take (i+1) xs
+                                              in runBC' drop' env (Fun env take':stack)
+runBC' (CALL:xs) env (v:(Fun ef cf):stack)  = runBC' cf (v:ef) (RA env xs:stack)
+runBC' (ADD:xs) env ((I i1):(I i2):stack)   = runBC' xs env ((I $ i1 + i2):stack) 
+runBC' (SUB:xs) env ((I i1):(I i2):stack)   | i1 > i2   = runBC' xs env ((I $ i1 - i2):stack)
+                                            | otherwise = runBC' xs env ((I 0):stack) 
+runBC' (FIX:xs) env stack                   = failFD4 "Implementar: FIX"
+runBC' (STOP:xs) env (v:stack)              = printFD4 $ show v >> return ()
+runBC' (JUMP:i:xs) env stack                = runBC' (drop i xs) env stack
+runBC' (SHIFT:xs) env (v:stack)             = runBC' xs (v:env) stack 
+runBC' (DROP:xs) (v:env) stack              = runBC' xs env stack  
+runBC' (PRINT:xs) env stack                 = do
   let (msg,_:xs') = span (/=NULL) xs
   printFD4 $ bc2string msg
   runBC' xs' env stack
-runBC' (PRINTN:xs) env s@(v:stack)= do
+runBC' (PRINTN:xs) env s@(v:stack)          = do
   printFD4 $ show v
-  runBC' xs env s
-runBC' (IFZ:xs) env stack = failFD4 "Implementar:IFZ"
+  runBC' xs env stack
+-- runBC' (IFZ:i:xs) env stack                 = do
 
--- |
+
+-- | Traduce una lista de declaraciones en una unica expresion "let in"
 translateDecl :: MonadFD4 m => [Maybe (Decl STerm)] -> m STerm
 translateDecl [Just (Decl _ _ _ t)] = return $ t
-translateDecl (Just d:xs) = do
-  xs' <- translateDecl xs
-  return $ (translateDecl' d) xs'
+translateDecl (Just d:xs)           = do
+                                    xs' <- translateDecl xs
+                                    return $ (translateDecl' d) xs'
 
--- |
+-- | Traduce una declaracion a una expresion "let in"
 translateDecl' :: Decl STerm -> (STerm -> STerm)
 translateDecl' (Decl i n ty t) = (\x -> SLet i (n, ty) t x)
