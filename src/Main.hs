@@ -37,7 +37,7 @@ import MonadFD4
 import TypeChecker ( tc, tcDecl )
 
 import CEK ( seek )
-import Bytecompile ( translateDecl, bc, bcWrite, bcRead, runBC, showOps )
+import Bytecompile ( translateDecl, bc, bcWrite, bcRead, runBC )
 
 prompt :: String
 prompt = "FD4> "
@@ -135,11 +135,10 @@ compileFile f = do
       mdecls <- mapM elabSDecl decls
       term <- translateDecl (filter (\x -> not $ isNothing x) mdecls)
       bytecode <- bc (elab term)
-      printFD4 $ show (showOps bytecode)
       liftIO $ bcWrite bytecode bcfout
       printFD4 ("Compilacion exitosa a " ++ bcfout)
     _ -> do 
-      printFD4 ("Abriendo modo standard "++ f)
+      printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
       mapM_ handleDecl decls
   setInter i
   where
@@ -156,8 +155,8 @@ evalDecl :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
 evalDecl (Decl p x ty e) = do
   m <- getMode
   e' <- case m of
-    Interactive -> eval e
-    InteractiveCEK -> seek e
+    Eval -> eval e
+    CEK -> seek e
   return (Decl p x ty e')
 
 -- | Maneja una declaración superficial
@@ -181,7 +180,6 @@ handleDecl d = do
           ppterm <- ppDecl td  --td'
           printFD4 ppterm
         _ -> do -- tanto Eval como CEK
-          printFD4 $ "Evaluando con modo:" ++ show m
           td <- typecheckDecl decl
           -- td' <- if opt then optimizeDecl td else return td
           ed <- evalDecl td
@@ -191,8 +189,7 @@ handleDecl d = do
     typecheckDecl (Decl p x ty t) = tcDecl (Decl p x ty (elab t))
     hanldeInteractiveDecl decl = do
       (Decl p x ty tt) <- typecheckDecl decl
-      te <- eval tt
-      addDecl (Decl p x ty te)
+      addDecl (Decl p x ty tt)
 
 data Command = Compile CompileForm
              | PPrint String

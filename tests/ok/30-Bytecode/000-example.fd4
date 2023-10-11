@@ -1,4 +1,4 @@
 let x:Nat = 4
 let y:Nat = 5
 let f(x y:Nat):Nat = ifz x then y else 0
-let x : Nat = print "f 1 0:=" (f 1 0)
+let z : Nat = print "f 1 0 := " (f 1 0)

@@ -6,10 +6,10 @@ module CEK ( seek ) where
   CEK Machine Module
 -}
 
-import Common (Pos)
+import Common ( Pos )
 import Lang 
-import MonadFD4 (MonadFD4, failFD4, printFD4, lookupDecl)
-import Eval (semOp)
+import MonadFD4 ( MonadFD4, failFD4, printFD4, lookupDecl )
+import Eval ( semOp )
 
 -- | Tipo de dato para los valores
 data ValCEK info var =

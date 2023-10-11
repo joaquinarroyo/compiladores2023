@@ -15,18 +15,16 @@
   una implementación de la Macchina para ejecutar el bytecode.
 -}
 module Bytecompile
-  (Bytecode, runBC, bcWrite, bcRead, showBC, bc, translateDecl, showOps )
+  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, translateDecl, showOps )
  where
 
 import Lang
 import MonadFD4
-
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
 import Data.Binary.Put ( putWord32le )
 import Data.Binary.Get ( getWord32le, isEmpty )
-
-import Data.List (intercalate)
+import Data.List ( intercalate )
 import Data.Char
 
 type Opcode = Int
@@ -38,28 +36,31 @@ newtype Bytecode32 = BC { un32 :: [Word32] }
 instance Binary Bytecode32 where
   put (BC bs) = mapM_ putWord32le bs
   get = go
-    where go =
-           do
-            empty <- isEmpty
-            if empty
-              then return $ BC []
-              else do x <- getWord32le
-                      BC xs <- go
-                      return $ BC (x:xs)
+    where 
+      go = do
+        empty <- isEmpty
+        if empty
+          then return $ BC []
+          else do 
+            x <- getWord32le
+            BC xs <- go
+            return $ BC (x:xs)
 
-{- Estos sinónimos de patrón nos permiten escribir y hacer
-pattern-matching sobre el nombre de la operación en lugar del código
-entero, por ejemplo:
+{- 
+  Estos sinónimos de patrón nos permiten escribir y hacer
+  pattern-matching sobre el nombre de la operación en lugar del código
+  entero, por ejemplo:
 
-   f (CALL : cs) = ...
+  f (CALL : cs) = ...
 
- Notar que si hubieramos escrito algo como
-   call = 5
- no podríamos hacer pattern-matching con `call`.
+  Notar que si hubieramos escrito algo como
+    call = 5
+  no podríamos hacer pattern-matching con `call`.
 
- En lo posible, usar estos códigos exactos para poder ejectutar un
- mismo bytecode compilado en distintas implementaciones de la máquina.
+  En lo posible, usar estos códigos exactos para poder ejectutar un
+  mismo bytecode compilado en distintas implementaciones de la máquina.
 -}
+
 pattern NULL     = 0
 pattern RETURN   = 1
 pattern CONST    = 2
@@ -75,13 +76,13 @@ pattern DROP     = 12
 pattern PRINT    = 13
 pattern PRINTN   = 14
 pattern JUMP     = 15
--- |
+-- | Nuevos patterns para IFZ
 pattern IFZ      = 16
 pattern THEN     = 17
 pattern ELSE     = 18
 pattern ENDIF    = 19
 
---función util para debugging: muestra el Bytecode de forma más legible.
+-- función util para debugging: muestra el Bytecode de forma más legible.
 showOps :: Bytecode -> [String]
 showOps [] = []
 showOps (NULL:xs)        = "NULL" : showOps xs
@@ -123,7 +124,7 @@ bcWrite :: Bytecode -> FilePath -> IO ()
 bcWrite bs filename = BS.writeFile filename (encode $ BC $ fromIntegral <$> bs)
 
 ---------------------------
--- * Ejecución de bytecode
+-- Ejecución de bytecode --
 ---------------------------
 
 -- | Lee de un archivo y lo decodifica a bytecode
@@ -190,6 +191,7 @@ instance Show ValBytecode where
 type Env = [ValBytecode]
 type Stack = [ValBytecode]
 
+-- | Ejecuta un bytecode
 runBC :: MonadFD4 m => Bytecode -> m ()
 runBC b = runBC' b [] [] 
 

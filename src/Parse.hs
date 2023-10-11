@@ -10,18 +10,17 @@ Stability   : experimental
 
 -}
 
-module Parse (tm, Parse.parse, sdecl, runP, P, program, declOrTm) where
+module Parse ( tm, Parse.parse, sdecl, runP, P, program, declOrTm ) where
 
 import Prelude hiding ( const )
-import Lang hiding (getPos)
+import Lang hiding ( getPos )
 import Common
-import Text.Parsec hiding (runP,parse)
---import Data.Char ( isNumber, ord )
+import Text.Parsec hiding ( runP, parse )
 import qualified Text.Parsec.Token as Tok
-import Text.ParserCombinators.Parsec.Language --( GenLanguageDef(..), emptyDef )
+import Text.ParserCombinators.Parsec.Language
 import qualified Text.Parsec.Expr as Ex
-import Text.Parsec.Expr (Operator, Assoc)
-import Control.Monad.Identity (Identity)
+import Text.Parsec.Expr ( Operator, Assoc )
+import Control.Monad.Identity ( Identity )
 
 type P = Parsec String ()
 

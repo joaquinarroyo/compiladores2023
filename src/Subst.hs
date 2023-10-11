@@ -1,16 +1,15 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# LANGUAGE GADTs #-}
-{-|
-Module      : Subst
-Description : Define las operaciones de la representacion locally nameless
-Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
-License     : GPL-3
-Maintainer  : mauro@fceia.unr.edu.ar
-Stability   : experimental
+{-
+   Module      : Subst
+   Description : Define las operaciones de la representacion locally nameless
+   Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
+   License     : GPL-3
+   Maintainer  : mauro@fceia.unr.edu.ar
+   Stability   : experimental
 
-Este módulo define las operaciones de la representacion locally nameless,
-y la substitución.
-
+   Este módulo define las operaciones de la representacion locally nameless,
+   y la substitución.
 -}
 
 module Subst where

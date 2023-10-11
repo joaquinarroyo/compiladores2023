@@ -2,14 +2,13 @@
 {-# HLINT ignore "Use record patterns" #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-overlapping-patterns #-}
-{-|
-Module      : PPrint
-Description : Pretty printer para FD4.
-Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
-License     : GPL-3
-Maintainer  : mauro@fceia.unr.edu.ar
-Stability   : experimental
-
+{-
+  Module      : PPrint
+  Description : Pretty printer para FD4.
+  Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
+  License     : GPL-3
+  Maintainer  : mauro@fceia.unr.edu.ar
+  Stability   : experimental
 -}
 
 module PPrint (
