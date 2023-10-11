@@ -96,7 +96,8 @@ addDecl d = modify (\s -> s { glb = d : glb s, cantDecl = cantDecl s + 1 })
 eraseLastFileDecls :: MonadFD4 m => m ()
 eraseLastFileDecls = do
   s <- get
-  let n = cantDecl s
+  let 
+    n = cantDecl s
     (_,rem) = splitAt n (glb s)
   modify (\s -> s {glb = rem, cantDecl = 0})
 

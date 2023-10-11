@@ -37,7 +37,7 @@ import MonadFD4
 import TypeChecker ( tc, tcDecl )
 
 import CEK ( seek )
-import Bytecompile ( translateDecl, bc, bcWrite, bcRead, runBC )
+import Bytecompile ( translateDecl, bc, bcWrite, bcRead, runBC, showOps )
 
 prompt :: String
 prompt = "FD4> "
@@ -100,15 +100,16 @@ repl args = do
     ++ "Modo: " ++ show m ++ "\n"
     ++ "Escriba :? para recibir ayuda.")
   loop
-  where loop = do
-    minput <- getInputLine prompt
-    case minput of
-      Nothing -> return ()
-      Just "" -> loop
-      Just x -> do
-        c <- liftIO $ interpretCommand x
-        b <- lift $ catchErrors $ handleCommand c
-        maybe loop (`when` loop) b
+  where 
+    loop = do
+      minput <- getInputLine prompt
+      case minput of
+        Nothing -> return ()
+        Just "" -> loop
+        Just x -> do
+          c <- liftIO $ interpretCommand x
+          b <- lift $ catchErrors $ handleCommand c
+          maybe loop (`when` loop) b
 
 -- | Carga un archivo
 loadFile ::  MonadFD4 m => FilePath -> m [SDecl]
@@ -134,6 +135,7 @@ compileFile f = do
       mdecls <- mapM elabSDecl decls
       term <- translateDecl (filter (\x -> not $ isNothing x) mdecls)
       bytecode <- bc (elab term)
+      printFD4 $ show (showOps bytecode)
       liftIO $ bcWrite bytecode bcfout
       printFD4 ("Compilacion exitosa a " ++ bcfout)
     _ -> do 
@@ -171,26 +173,22 @@ handleDecl d = do
         InteractiveCEK -> hanldeInteractiveDecl decl
         Typecheck -> do
           f <- getLastFile
-          printFD4 ("Chequeando tipos de "++f)
+          printFD4 $ "Chequeando tipos de " ++ f 
           td <- typecheckDecl decl
           addDecl td
           -- opt <- getOpt
           -- td' <- if opt then optimize td else td
           ppterm <- ppDecl td  --td'
           printFD4 ppterm
-        Eval -> do
+        _ -> do -- tanto Eval como CEK
+          printFD4 $ "Evaluando con modo:" ++ show m
           td <- typecheckDecl decl
           -- td' <- if opt then optimizeDecl td else return td
-          ed <- evalDecl td
-          addDecl ed
-        CEK -> do
-          td <- typecheckDecl decl
           ed <- evalDecl td
           addDecl ed
   where
     typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
     typecheckDecl (Decl p x ty t) = tcDecl (Decl p x ty (elab t))
-    hanldeInteractiveDecl :: MonadFD4 m => Decl TTerm -> m ()
     hanldeInteractiveDecl decl = do
       (Decl p x ty tt) <- typecheckDecl decl
       te <- eval tt
@@ -260,13 +258,14 @@ handleCommand cmd = do
     Quit   ->  return False
     Noop   ->  return True
     Help   ->  printFD4 (helpTxt commands) >> return True
-    Browse ->  do  printFD4 (unlines (reverse (nub (map declName glb))))
-                  return True
-    Compile c ->
-              do  case c of
-                      CompileInteractive e -> compilePhrase e
-                      CompileFile f -> compileFile f
-                  return True
+    Browse ->  do 
+      printFD4 (unlines (reverse (nub (map declName glb))))
+      return True
+    Compile c -> do 
+      case c of
+        CompileInteractive e -> compilePhrase e
+        CompileFile f -> compileFile f
+      return True
     Reload ->  eraseLastFileDecls >> (getLastFile >>= compileFile) >> return True
     PPrint e   -> printPhrase e >> return True
     Type e    -> typeCheckPhrase e >> return True
