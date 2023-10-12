@@ -102,7 +102,7 @@ showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
                            in ("PRINT " ++ show (bc2string msg)) : showOps rest
 showOps (PRINTN:xs)      = "PRINTN" : showOps xs
 showOps (ADD:xs)         = "ADD" : showOps xs
-showOps (IFZ:i:xs)       = ("IFZ len=" ++ show i) : showOps xs
+showOps (IFZ:i:xs)       = "IFZ" : showOps xs
 showOps (THEN:xs)        = "THEN" : showOps xs
 showOps (ELSE:xs)        = "ELSE" : showOps xs
 showOps (ENDIF:xs)       = "ENDIF" : showOps xs
@@ -152,8 +152,7 @@ bc' term = case term of
     return $ t1' ++ t2' ++ [CALL]
   (Print _ s t)                   -> do
     t' <- bc' t
-    return $ t' ++ [PRINT] ++ 
-             string2bc s ++ [NULL]
+    return $ [PRINT] ++ string2bc s ++ [NULL] ++ t' ++ [PRINTN]
   (BinaryOp _ op t1 t2)           -> do
     t1' <- bc' t1
     t2' <- bc' t2
@@ -182,6 +181,7 @@ data ValBytecode =
   | Fun Env Bytecode
   | RA Env Bytecode
   | Ifz Env Bytecode
+  | VPrint String
 
 instance Show ValBytecode where
   show (I i) = show i
@@ -213,13 +213,14 @@ runBC' (STOP:xs) env (v:stack)              = return ()
 runBC' (JUMP:i:xs) env stack                = runBC' (drop i xs) env stack
 runBC' (SHIFT:xs) env (v:stack)             = runBC' xs (v:env) stack 
 runBC' (DROP:xs) (v:env) stack              = runBC' xs env stack  
-runBC' (PRINT:xs) env s@(v:stack)           = do
-  let (msg,_:xs') = span (/=NULL) xs
-  printFD4 $ bc2string msg ++ show v
-  runBC' xs' env s
-runBC' (PRINTN:xs) env s@(v:stack)          = do
-  printFD4 $ show v
-  runBC' xs env s
+runBC' (PRINT:xs) env stack                 = do
+  let 
+    (msg, _:xs') = span (/=NULL) xs
+    s = bc2string msg
+  runBC' xs' env ((VPrint s):stack)
+runBC' (PRINTN:xs) env s'@(v:(VPrint p):s)  = do
+  printFD4 $ p ++ show v
+  runBC' xs env s'
 runBC' (IFZ:i:xs) env stack                 = 
   let 
     drop' = drop (i+1) xs

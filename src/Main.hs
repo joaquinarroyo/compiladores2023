@@ -35,9 +35,11 @@ import Eval ( eval )
 import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
+import System.CPUTime ( getCPUTime )
 
 import CEK ( seek )
 import Bytecompile ( translateDecl, bc, bcWrite, bcRead, runBC )
+
 
 prompt :: String
 prompt = "FD4> "
@@ -318,4 +320,7 @@ typeCheckPhrase x = do
 runVM :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
 runVM f = do
   b <- liftIO $ bcRead f
+  t1 <- liftIO $ getCPUTime
   runBC b
+  t2 <- liftIO $ getCPUTime
+  printFD4 $ "Tiempo de ejecución de Bytecode: " ++ show ((fromIntegral (t2-t1)) / (10^12)) ++ " segundos"
