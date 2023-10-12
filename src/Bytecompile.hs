@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE RecordWildCards #-}
+
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 
@@ -36,12 +36,12 @@ newtype Bytecode32 = BC { un32 :: [Word32] }
 instance Binary Bytecode32 where
   put (BC bs) = mapM_ putWord32le bs
   get = go
-    where 
+    where
       go = do
         empty <- isEmpty
         if empty
           then return $ BC []
-          else do 
+          else do
             x <- getWord32le
             BC xs <- go
             return $ BC (x:xs)
@@ -78,9 +78,7 @@ pattern PRINTN   = 14
 pattern JUMP     = 15
 -- | Nuevos patterns para IFZ
 pattern IFZ      = 16
-pattern THEN     = 17
-pattern ELSE     = 18
-pattern ENDIF    = 19
+pattern CJUMP    = 17
 
 -- función util para debugging: muestra el Bytecode de forma más legible.
 showOps :: Bytecode -> [String]
@@ -102,10 +100,7 @@ showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
                            in ("PRINT " ++ show (bc2string msg)) : showOps rest
 showOps (PRINTN:xs)      = "PRINTN" : showOps xs
 showOps (ADD:xs)         = "ADD" : showOps xs
-showOps (IFZ:i:xs)       = "IFZ" : showOps xs
-showOps (THEN:xs)        = "THEN" : showOps xs
-showOps (ELSE:xs)        = "ELSE" : showOps xs
-showOps (ENDIF:xs)       = "ENDIF" : showOps xs
+showOps (CJUMP:i:xs)     = ("CJUMP off=" ++ show i) : showOps xs
 showOps (x:xs)           = show x : showOps xs
 
 showBC :: Bytecode -> String
@@ -139,12 +134,12 @@ bc t = do
 
 bc' :: MonadFD4 m => Term -> m Bytecode
 bc' term = case term of
-  (V _ (Bound i))                 -> return (ACCESS:i:[])
+  (V _ (Bound i))                 -> return [ACCESS, i]
   (V _ (Free n))                  -> failFD4 "bc: Free"
-  (Const _ (CNat i))              -> return $ (CONST:i:[])
+  (Const _ (CNat i))              -> return [CONST, i]
   (Lam _ _ _ (Sc1 t))             -> do
     t' <- bc' t
-    return $ [FUNCTION, length t'] 
+    return $ [FUNCTION, length t' + 1]
              ++ t' ++ [RETURN]
   (App _ t1 t2)                   -> do
     t1' <- bc' t1
@@ -161,15 +156,14 @@ bc' term = case term of
       Sub -> return $ t1' ++ t2' ++ [SUB]
   (Fix _ _ _ _ _ (Sc2 t))         -> do
     t' <- bc' t
-    return $ [FUNCTION, length t'] ++ 
+    return $ [FUNCTION, length t' + 1] ++
              t' ++ [RETURN, FIX]
   (IfZ _ t1 t2 t3)                -> do
     t1' <- bc' t1
     t2' <- bc' t2
     t3' <- bc' t3
-    return $ [IFZ, length t1'] ++ 
-             t1' ++ [THEN] ++ t2' ++ 
-             [ELSE] ++ t3' ++ [ENDIF]
+    return $ t1' ++ [CJUMP, length t2' + 2] ++
+             t2' ++ [JUMP, length t3'] ++ t3'
   (Let _ n ty t1 (Sc1 t2))        -> do
     t1' <- bc' t1
     t2' <- bc' t2
@@ -180,7 +174,6 @@ data ValBytecode =
     I Int
   | Fun Env Bytecode
   | RA Env Bytecode
-  | Ifz Env Bytecode
   | VPrint String
 
 instance Show ValBytecode where
@@ -193,49 +186,39 @@ type Stack = [ValBytecode]
 
 -- | Ejecuta un bytecode
 runBC :: MonadFD4 m => Bytecode -> m ()
-runBC b = runBC' b [] [] 
+runBC b = runBC' b [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
-runBC' (RETURN:_) _ (v:(RA e c):stack)      = runBC' c e (v:stack)  
-runBC' (CONST:i:xs) env stack               = runBC' xs env ((I i):stack)
+runBC' (RETURN:_) _ (v:(RA e c):stack)      = runBC' c e (v:stack)
+runBC' (CONST:i:xs) env stack               = runBC' xs env (I i:stack)
 runBC' (ACCESS:i:xs) env stack              = runBC' xs env (env!!i:stack)
-runBC' (FUNCTION:i:xs) env stack            = 
-  let 
-    drop' = drop (i+1) xs
-    take' = take (i+1) xs
+runBC' (FUNCTION:i:xs) env stack            =
+  let
+    drop' = drop i xs
+    take' = take i xs
   in runBC' drop' env (Fun env take':stack)
 runBC' (CALL:xs) env (v:(Fun ef cf):stack)  = runBC' cf (v:ef) (RA env xs:stack)
-runBC' (ADD:xs) env ((I i1):(I i2):stack)   = runBC' xs env ((I $ i1 + i2):stack) 
-runBC' (SUB:xs) env ((I i1):(I i2):stack)   | i1 > i2   = runBC' xs env ((I $ i1 - i2):stack)
-                                            | otherwise = runBC' xs env ((I 0):stack) 
-runBC' (FIX:xs) env stack                   = failFD4 "Implementar: FIX"
+runBC' (ADD:xs) env ((I i1):(I i2):stack)   = runBC' xs env (I (i1 + i2):stack)
+runBC' (SUB:xs) env ((I i1):(I i2):stack)   | i1 > i2   = runBC' xs env (I (i1 - i2):stack)
+                                            | otherwise = runBC' xs env (I 0:stack)
+runBC' (FIX:xs) env (Fun ef cf:stack)       = do
+  runBC' xs env (env ++ (Fun ef cf:stack))
 runBC' (STOP:xs) env (v:stack)              = return ()
 runBC' (JUMP:i:xs) env stack                = runBC' (drop i xs) env stack
-runBC' (SHIFT:xs) env (v:stack)             = runBC' xs (v:env) stack 
-runBC' (DROP:xs) (v:env) stack              = runBC' xs env stack  
+runBC' (SHIFT:xs) env (v:stack)             = runBC' xs (v:env) stack
+runBC' (DROP:xs) (v:env) stack              = runBC' xs env stack
 runBC' (PRINT:xs) env stack                 = do
-  let 
+  let
     (msg, _:xs') = span (/=NULL) xs
     s = bc2string msg
-  runBC' xs' env ((VPrint s):stack)
-runBC' (PRINTN:xs) env s'@(v:(VPrint p):s)  = do
+  runBC' xs' env (VPrint s:stack)
+runBC' (PRINTN:xs) env s'@(v:(VPrint p):s)  = do -- Ver
   printFD4 $ p ++ show v
   runBC' xs env s'
-runBC' (IFZ:i:xs) env stack                 = 
-  let 
-    drop' = drop (i+1) xs
-    take' = take (i+1) xs
-  in 
-    runBC' take' env ((Ifz env drop'):stack)
-runBC' (THEN:xs) env (v:(Ifz _ cf):stack)   = do
-  let 
-    (th, elr) = span (/=ELSE) cf          -- queda el 'then'
-    (el, r) = span (/=ENDIF) (drop 1 elr) -- queda el 'else'
-    r' = drop 1 r                         -- queda el 'resto'
-  case v of
-    (I 0) -> runBC' (th ++ r') env stack
-    (I _) -> runBC' (el ++ r') env stack
-    _     -> failFD4 "ENDCOND: no hay un entero en la condicion"
+runBC' (CJUMP:i:xs) env ((I c):stack)       =
+  case c of
+    0 -> runBC' xs env stack
+    _ -> runBC' (drop i xs) env stack
 -- caso de fallo
 runBC' i env stack = do
   printFD4 $ show (showOps i)
@@ -245,11 +228,11 @@ runBC' i env stack = do
 
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
 translateDecl :: MonadFD4 m => [Maybe (Decl STerm)] -> m STerm
-translateDecl [Just (Decl _ _ _ t)] = return $ t
+translateDecl [Just (Decl _ _ _ t)] = return t
 translateDecl (Just d:xs)           = do
                                     xs' <- translateDecl xs
-                                    return $ (translateDecl' d) xs'
+                                    return $ translateDecl' d xs'
 
 -- | Traduce una declaracion a una expresion "let in"
 translateDecl' :: Decl STerm -> (STerm -> STerm)
-translateDecl' (Decl i n ty t) = (\x -> SLet i (n, ty) t x)
+translateDecl' (Decl i n ty t) = SLet i (n, ty) t

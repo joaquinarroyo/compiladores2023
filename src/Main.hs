@@ -38,7 +38,7 @@ import TypeChecker ( tc, tcDecl )
 import System.CPUTime ( getCPUTime )
 
 import CEK ( seek )
-import Bytecompile ( translateDecl, bc, bcWrite, bcRead, runBC )
+import Bytecompile ( translateDecl, bc, bcWrite, bcRead, runBC, showOps )
 
 
 prompt :: String
@@ -102,7 +102,7 @@ repl args = do
     ++ "Modo: " ++ show m ++ "\n"
     ++ "Escriba :? para recibir ayuda.")
   loop
-  where 
+  where
     loop = do
       minput <- getInputLine prompt
       case minput of
@@ -137,17 +137,18 @@ compileFile f = do
       mdecls <- mapM elabSDecl decls
       term <- translateDecl (filter (\x -> not $ isNothing x) mdecls)
       bytecode <- bc (elab term)
+      printFD4 $ show (showOps bytecode)
       liftIO $ bcWrite bytecode bcfout
       printFD4 ("Compilacion exitosa a " ++ bcfout)
-    _ -> do 
+    _ -> do
       printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
       mapM_ handleDecl decls
   setInter i
   where
-    bcfout = ((splitOn "." f)!!0) ++ ".bc"
+    bcfout = head (splitOn "." f) ++ ".bc"
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
-parseIO filename p x = 
+parseIO filename p x =
   case runP p x filename of
     Left e  -> throwError (ParseErr e)
     Right r -> return r
@@ -168,13 +169,13 @@ handleDecl d = do
   mdecl <- elabSDecl d
   case mdecl of
     Nothing -> return ()
-    Just decl -> 
+    Just decl ->
       case m of
         Interactive -> hanldeInteractiveDecl decl
         InteractiveCEK -> hanldeInteractiveDecl decl
         Typecheck -> do
           f <- getLastFile
-          printFD4 $ "Chequeando tipos de " ++ f 
+          printFD4 $ "Chequeando tipos de " ++ f
           td <- typecheckDecl decl
           addDecl td
           -- opt <- getOpt
@@ -257,10 +258,10 @@ handleCommand cmd = do
     Quit   ->  return False
     Noop   ->  return True
     Help   ->  printFD4 (helpTxt commands) >> return True
-    Browse ->  do 
+    Browse ->  do
       printFD4 (unlines (reverse (nub (map declName glb))))
       return True
-    Compile c -> do 
+    Compile c -> do
       case c of
         CompileInteractive e -> compilePhrase e
         CompileFile f -> compileFile f
