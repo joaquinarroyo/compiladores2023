@@ -1,3 +1,4 @@
-let x:Nat = 4
-let f(x:Nat):Nat = ifz x then 1 else 0
-let z:Nat = print "f x=" (f x)
+let g(x:Nat):Nat = x + 1
+let h(g:Nat->Nat):Nat = let f:Nat->Nat = g in f 4
+let z:Nat = h g
+let ret:Nat = print "h g = " z

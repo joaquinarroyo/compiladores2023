@@ -1,0 +1,2 @@
+let f(x:Nat):Nat = x + 1
+let ret:Nat = f 1

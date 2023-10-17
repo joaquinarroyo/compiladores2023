@@ -77,8 +77,9 @@ pattern PRINT    = 13
 pattern PRINTN   = 14
 pattern JUMP     = 15
 -- | Nuevos patterns para IFZ
-pattern IFZ      = 16
-pattern CJUMP    = 17
+pattern CJUMP    = 16
+pattern TAILCALL = 17
+
 
 -- función util para debugging: muestra el Bytecode de forma más legible.
 showOps :: Bytecode -> [String]
@@ -101,6 +102,7 @@ showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
 showOps (PRINTN:xs)      = "PRINTN" : showOps xs
 showOps (ADD:xs)         = "ADD" : showOps xs
 showOps (CJUMP:i:xs)     = ("CJUMP off=" ++ show i) : showOps xs
+showOps (TAILCALL:xs)    = "TAILCALL" : showOps xs
 showOps (x:xs)           = show x : showOps xs
 
 showBC :: Bytecode -> String
@@ -138,9 +140,8 @@ bc' term = case term of
   (V _ (Free n))                  -> failFD4 "bc: Free"
   (Const _ (CNat i))              -> return [CONST, i]
   (Lam _ _ _ (Sc1 t))             -> do
-    t' <- bc' t
-    return $ [FUNCTION, length t' + 1]
-             ++ t' ++ [RETURN]
+    t' <- tc t
+    return $ [FUNCTION, length t'] ++ t'
   (App _ t1 t2)                   -> do
     t1' <- bc' t1
     t2' <- bc' t2
@@ -167,7 +168,27 @@ bc' term = case term of
   (Let _ n ty t1 (Sc1 t2))        -> do
     t1' <- bc' t1
     t2' <- bc' t2
-    return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
+    return $ t1' ++ [SHIFT] ++ t2'
+
+tc :: MonadFD4 m => Term -> m Bytecode
+tc term = case term of
+  (App _ t1 t2) -> do
+    t1' <- bc' t1
+    t2' <- bc' t2
+    return $ t1' ++ t2' ++ [TAILCALL]
+  (IfZ _ t1 t2 t3) -> do
+    t1' <- bc' t1
+    t2' <- tc t2
+    t3' <- tc t3
+    return $ t1' ++ [CJUMP, length t2' + 2] ++
+             t2' ++ [JUMP, length t3'] ++ t3'
+  (Let _ n ty t1 (Sc1 t2)) -> do
+    t1' <- bc' t1
+    t2' <- tc t2
+    return $ t1' ++ [SHIFT] ++ t2'
+  _ -> do
+    term' <- bc' term
+    return $ term' ++ [RETURN]
 
 -- | Bytecode Vals
 data ValBytecode =
@@ -202,7 +223,9 @@ runBC' (ADD:xs) env ((I i1):(I i2):stack)   = runBC' xs env (I (i1 + i2):stack)
 runBC' (SUB:xs) env ((I i1):(I i2):stack)   | i1 > i2   = runBC' xs env (I (i1 - i2):stack)
                                             | otherwise = runBC' xs env (I 0:stack)
 runBC' (FIX:xs) env (Fun ef cf:stack)       = do
-  runBC' xs env (env ++ (Fun ef cf:stack))
+  runBC' xs env (Fun envFix cf:stack)
+  where
+    envFix = Fun ef cf:env
 runBC' (STOP:xs) env (v:stack)              = return ()
 runBC' (JUMP:i:xs) env stack                = runBC' (drop i xs) env stack
 runBC' (SHIFT:xs) env (v:stack)             = runBC' xs (v:env) stack
@@ -219,6 +242,7 @@ runBC' (CJUMP:i:xs) env ((I c):stack)       =
   case c of
     0 -> runBC' xs env stack
     _ -> runBC' (drop i xs) env stack
+runBC' (TAILCALL:xs) env ((I i):(Fun ef cf):stack) = runBC' cf (I i:Fun ef cf:env) stack
 -- caso de fallo
 runBC' i env stack = do
   printFD4 $ show (showOps i)
