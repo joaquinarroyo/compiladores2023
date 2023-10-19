@@ -1,2 +1,2 @@
-let rec f(x : Nat):Nat = f x 
-let x : Nat = f 0
+let rec f(x : Nat):Nat = ifz x then (print "x = " 0) else (print "x = " (f (x-1)))
+let x : Nat = f 1

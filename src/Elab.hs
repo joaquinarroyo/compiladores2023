@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# OPTIONS_GHC -Wno-overlapping-patterns #-}
 
 {-|
 Module      : Elab
@@ -52,7 +53,7 @@ elab' env (SSugarLet p (v,vty) bs def body)           = elab' env (SLet p (v, bi
 elab' env (SSugarFix p fty (xty:xs) t)                = elab' env (SFix p fty xty (SSugarLam p xs t))
 elab' env (SSugarLetRec p (v,vty) [(x,xty)] def body) = let fty = (v, FunTy xty vty Nothing)
                                                         in elab' env (SLet p fty (SFix p fty (x,xty) def) body)
-elab' env (SSugarLetRec p (v,vty) (xty:bs) def body)  = elab' env (SSugarLetRec p (v, (bindingToType bs vty)) [xty] (SSugarLam p bs def) body)
+elab' env (SSugarLetRec p (v,vty) (xty:bs) def body)  = elab' env (SSugarLetRec p (v, bindingToType bs vty) [xty] (SSugarLam p bs def) body)
 
 -- | elaborador de declaraciones core
 elabDecl :: Decl STerm -> Decl Term
@@ -73,7 +74,7 @@ elabSDecl s = case s of
   (SDecl p n ty [(x, xty)] body True)     -> do
     ty' <- checkSin p ty
     xty' <- checkSin p xty
-    sfix <- elabSynTy (SFix p (n, (FunTy xty' ty' Nothing)) (x,xty') body)
+    sfix <- elabSynTy (SFix p (n, FunTy xty' ty' Nothing) (x,xty') body)
     return $ Just $ Decl p n (FunTy xty' ty' Nothing) sfix
   (SDecl p n ty ((x, xty):bs) body True)  -> do
     ty' <- checkSin p ty
@@ -87,17 +88,17 @@ elabSDecl s = case s of
     bs' <- checkSins p bs
     sslam <- elabSynTy (SSugarLam p bs' body)
     elabSDecl (SDecl p n (bindingToType bs' ty') [(x, xty')] sslam True)
-  (IndirectTypeDecl p n (FunTy a b s))    -> do
+  (IndirectTypeDecl p n (FunTy a b s'))    -> do
     a' <- checkSin p a
     b' <- checkSin p b
-    elabSDecl (DirectTypeDecl p n (FunTy a' b' s))
+    elabSDecl (DirectTypeDecl p n (FunTy a' b' s'))
   (IndirectTypeDecl p n (SynTy tyn))      -> do
     mty <- lookupSinTy tyn
     case mty of
         Nothing -> failPosFD4 p "Type synonym not declared"
         Just ty -> elabSDecl (DirectTypeDecl p n ty)
   (IndirectTypeDecl p n ty)               -> failFD4 "IndirectTypeDecl: No deberia pasar"
-  d@(DirectTypeDecl p n ty)               -> do 
+  d@(DirectTypeDecl p n ty)               -> do
       addSinTy d
       return Nothing
 
@@ -112,17 +113,17 @@ elabSynTy (SLam p (v, ty) t)                    = do
   t'  <- elabSynTy t
   return $ SLam p (v, ty') t'
 elabSynTy (SFix p (f,fty) (x,xty) t)            = do
-  fty' <- checkSin p fty 
+  fty' <- checkSin p fty
   xty' <- checkSin p xty
   t'   <- elabSynTy t
   return $ SFix p (f, fty') (x, xty') t'
 elabSynTy (SIfZ p c t e)                        = do
-  c' <- elabSynTy c 
+  c' <- elabSynTy c
   t' <- elabSynTy t
   e' <- elabSynTy e
   return $ SIfZ p c' t' e'
 elabSynTy (SBinaryOp i o t u)                   = do
-  t' <- elabSynTy t 
+  t' <- elabSynTy t
   u' <- elabSynTy u
   return $ SBinaryOp i o t' u'
 elabSynTy (SPrint i str mt)                     = do

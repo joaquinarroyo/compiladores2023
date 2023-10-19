@@ -19,7 +19,7 @@
 STATIC_ASSERT(sizeof (int) >= sizeof (uint32_t));
 
 /* Habilitar impresión de traza? */
-#define TRACE 1
+#define TRACE 0
 
 enum {
 	RETURN   = 1,
@@ -122,7 +122,6 @@ static int env_len(env e)
  *
  */
 static value get_index(env e, int i) {
-	fprintf(stderr, "GET INDEX= %d, %d \n", i, e->v.clo.clo_body);
 	if (i == 0) {
 		return e->v;
 	}
@@ -275,11 +274,9 @@ void run(code init_c)
 			(*s++).clo = ret_addr;
 			/* Cambiamos al entorno de la clausura, agregando arg */
 			e = env_push(fun.clo.clo_env, arg);
-			fprintf(stderr, "C PRE CALL %li\n", c);
 
 			/* Saltamos! */
 			c = fun.clo.clo_body;
-			fprintf(stderr, "C CALL %li\n", c);
 
 			break;
 		}
@@ -312,14 +309,11 @@ void run(code init_c)
 				.clo_body = c,
 			};
 
-			fprintf(stderr, "FUN= %d \n", clo.clo_body);
-
 			/* La ponemos en la pila */
 			(*s++).clo = clo;
 
 			/* Y saltamos de largo el cuerpo del lambda */
 			c += leng;
-			fprintf(stderr, "C POST-FUN %li\n", c);
 			break;
 		}
 
@@ -348,8 +342,7 @@ void run(code init_c)
 		}
 
 		case SHIFT: {
-			value v = *s--;
-			fprintf(stderr, "SHIFT= %d, %d \n", v.clo.clo_body);
+			value v = *--s;
 			e = env_push(e, v);
 			break;
 		}
@@ -375,7 +368,7 @@ void run(code init_c)
 
 		case CJUMP: {
 			uint32_t i = *c++;
-			uint32_t con = (*s--).i;
+			uint32_t con = (*--s).i;
 			if (con != 0) {
 				c += i;	
 			}
