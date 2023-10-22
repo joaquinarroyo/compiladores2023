@@ -195,13 +195,11 @@ data ValBytecode =
     I Int
   | Fun Env Bytecode
   | RA Env Bytecode
-  | VPrint String
 
 instance Show ValBytecode where
   show (I i) = show i
   show (Fun e b) = "Clos" ++ show (showOps b)
   show (RA e b) = "RA" ++ show (showOps b)
-  show (VPrint s) = s
 
 type Env = [ValBytecode]
 type Stack = [ValBytecode]
@@ -215,34 +213,33 @@ runBC' (RETURN:_) _ (v:(RA e c):stack)      = runBC' c e (v:stack)
 runBC' (CONST:i:xs) env stack               = runBC' xs env (I i:stack)
 runBC' (ACCESS:i:xs) env stack              = runBC' xs env (env!!i:stack)
 runBC' (FUNCTION:i:xs) env stack            =
-  let
-    drop' = drop i xs
-    take' = take i xs
+  let drop' = drop i xs
+      take' = take i xs
   in runBC' drop' env (Fun env take':stack)
 runBC' (CALL:xs) env (v:(Fun ef cf):stack)  = runBC' cf (v:ef) (RA env xs:stack)
 runBC' (ADD:xs) env ((I i1):(I i2):stack)   = runBC' xs env (I (i1 + i2):stack)
-runBC' (SUB:xs) env ((I i1):(I i2):stack)   | i1 > i2   = runBC' xs env (I (i1 - i2):stack)
-                                            | otherwise = runBC' xs env (I 0:stack)
-runBC' (FIX:xs) env ((Fun ef cf):stack)     = -- VER
+runBC' (SUB:xs) env ((I i1):(I i2):stack)   = runBC' xs env (I (max 0 (i2 - i1)):stack)
+runBC' (FIX:xs) env ((Fun ef cf):stack)     =
   let envFix = Fun envFix cf:env
   in runBC' xs env (Fun envFix cf:stack)
 runBC' (STOP:xs) env (v:stack)              = return ()
 runBC' (JUMP:i:xs) env stack                = runBC' (drop i xs) env stack
 runBC' (SHIFT:xs) env (v:stack)             = runBC' xs (v:env) stack
 runBC' (DROP:xs) (v:env) stack              = runBC' xs env stack
-runBC' (PRINT:xs) env stack                 = do
-  let
-    (msg, _:xs') = span (/=NULL) xs
-    s = bc2string msg
-  runBC' xs' env (VPrint s:stack)
-runBC' (PRINTN:xs) env (v:(VPrint p):s)     = do
-  printFD4 $ p ++ show v
-  runBC' xs env s
+runBC' (PRINT:xs) env stack                 =
+  let (msg, _:xs') = span (/=NULL) xs
+      s = bc2string msg
+  in do printFD4nobreak s
+        runBC' xs' env stack
+runBC' (PRINTN:xs) env s@(I i:stack)        = 
+  do printFD4 (show i)
+     runBC' xs env s
 runBC' (CJUMP:i:xs) env ((I c):stack)       =
   case c of
     0 -> runBC' xs env stack
     _ -> runBC' (drop i xs) env stack
-runBC' (TAILCALL:xs) env ((I i):(Fun ef cf):stack) = runBC' cf (I i:Fun ef cf:env) stack
+runBC' (TAILCALL:xs) env (v:(Fun ef cf):stack) = runBC' cf (v:ef) stack
+
 -- caso de fallo
 runBC' i env stack = do
   printFD4 $ show (showOps i)

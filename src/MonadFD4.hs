@@ -22,6 +22,7 @@ module MonadFD4 (
   lookupDecl,
   lookupTy,
   printFD4,
+  printFD4nobreak,
   setLastFile,
   getLastFile,
   setInter,
@@ -83,6 +84,9 @@ getInter = gets inter
 
 printFD4 :: MonadFD4 m => String -> m ()
 printFD4 = liftIO . putStrLn
+
+printFD4nobreak :: MonadFD4 m => String -> m ()
+printFD4nobreak = liftIO . putStr
 
 setLastFile :: MonadFD4 m => FilePath -> m ()
 setLastFile filename = modify (\s -> s {lfile = filename , cantDecl = 0})
