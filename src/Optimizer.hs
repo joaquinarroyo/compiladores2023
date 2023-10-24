@@ -1,0 +1,3 @@
+module Optimizer where
+
+-- constantFolding :: 

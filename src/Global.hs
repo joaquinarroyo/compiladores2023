@@ -11,6 +11,16 @@ module Global where
 
 import Lang
 
+-- |
+data Profile = Profile {
+  cek :: Int,
+  bytecode :: (Int, Int, Int)
+}
+
+initProfile :: Profile
+initProfile = Profile { cek = 0, bytecode = (0, 0, 0) }
+
+-- |
 data GlEnv = GlEnv {
   inter :: Bool,        --  ^ True, si estamos en modo interactivo.
                         -- Este parámetro puede cambiar durante la ejecución:
@@ -18,7 +28,8 @@ data GlEnv = GlEnv {
   lfile :: String,      -- ^ Último archivo cargado.
   cantDecl :: Int,      -- ^ Cantidad de declaraciones desde la última carga
   glb :: [Decl TTerm],  -- ^ Entorno con declaraciones globales
-  tysin :: [SDecl]      -- ^ Entorno con declaraciones de sinonimos de tipos
+  tysin :: [SDecl],     -- ^ Entorno con declaraciones de sinonimos de tipos
+  profile :: Profile
 }
 
 -- ^ Entorno de tipado de declaraciones globales
@@ -47,10 +58,12 @@ data Mode =
   deriving Show
 
 data Conf = Conf {
-    opt :: Bool,          --  ^ True, si estan habilitadas las optimizaciones.
-    modo :: Mode
+  opt :: Bool,          --  ^ True, si estan habilitadas las optimizaciones.
+  pro :: Bool,          --  ^ True, si estaa habilitado el profilling.
+  modo :: Mode
 }
 
 -- | Valor del estado inicial
 initialEnv :: GlEnv
-initialEnv = GlEnv False "" 0 [] []
+initialEnv = GlEnv False "" 0 [] [] initProfile
+

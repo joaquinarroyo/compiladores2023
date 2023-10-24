@@ -19,6 +19,7 @@
 module MonadFD4 (
   FD4,
   runFD4,
+  -- runFD4Profile,
   lookupDecl,
   lookupTy,
   printFD4,
@@ -29,6 +30,7 @@ module MonadFD4 (
   getInter,
   getMode,
   getOpt,
+  getPro,
   eraseLastFileDecls,
   failPosFD4,
   failFD4,
@@ -51,6 +53,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import System.IO
 
+
 -- * La clase 'MonadFD4'
 
 {-| La clase de mónadas 'MonadFD4' clasifica a las mónadas con soporte para una configuración Global 'Global.Conf', 
@@ -69,9 +72,13 @@ y otras operaciones derivadas de ellas, como por ejemplo
    - @gets :: (GlEnv -> a) -> m a@  
 -}
 class (MonadIO m, MonadState GlEnv m, MonadError Error m, MonadReader Conf m) => MonadFD4 m where
+  tickCEK :: m ()
 
 getOpt :: MonadFD4 m => m Bool
 getOpt = asks opt
+
+getPro :: MonadFD4 m => m Bool
+getPro = asks pro
 
 getMode :: MonadFD4 m => m Mode
 getMode = asks modo
@@ -152,12 +159,25 @@ catchErrors c = catchError (Just <$> c)
 -- El transformador de mónadas @StateT GlEnv@ agrega la mónada @ExcepT Error IO@ la posibilidad de manejar un estado de tipo 'Global.GlEnv'.
 type FD4 = ReaderT Conf (StateT GlEnv (ExceptT Error IO))
 
+-- type FD4Profile = ReaderT Conf (StateT GlEnv (ExceptT Error IO))
+
 -- | Esta es una instancia vacía, ya que 'MonadFD4' no tiene funciones miembro.
-instance MonadFD4 FD4
+instance MonadFD4 FD4 where
+  tickCEK = return ()
+
+-- instance MonadFD4 FD4Profile where
+--   tickCEK = modify (\s -> s { profile = cek profile + 1 })
 
 -- 'runFD4\'' corre una computación de la mónad 'FD4' en el estado inicial 'Global.initialEnv' 
 runFD4' :: FD4 a -> Conf -> IO (Either Error (a, GlEnv))
-runFD4' c conf =  runExceptT $ runStateT (runReaderT c conf)  initialEnv
+runFD4' c conf = runExceptT $ runStateT (runReaderT c conf) initialEnv
 
 runFD4:: FD4 a -> Conf -> IO (Either Error a)
 runFD4 c conf = fmap fst <$> runFD4' c conf
+
+-- runFD4Profile
+-- runFD4Profile' :: FD4Profile a -> Conf -> IO (Either Error (a, GlEnv))
+-- runFD4Profile' c conf = runExceptT $ runStateT (runReaderT c conf) initialEnv
+
+-- runFD4Profile:: FD4Profile a -> Conf -> IO (Either Error a)
+-- runFD4Profile c conf = fmap fst <$> runFD4Profile' c conf

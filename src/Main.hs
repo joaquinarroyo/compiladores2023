@@ -21,7 +21,7 @@ import Data.List.Split ( splitOn )
 import Data.Char ( isSpace )
 import Control.Exception ( catch , IOException )
 import System.IO ( hPrint, stderr, hPutStrLn )
-import Data.Maybe ( fromMaybe, isNothing )
+import Data.Maybe ( fromMaybe, isJust )
 
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
@@ -45,27 +45,26 @@ prompt :: String
 prompt = "FD4> "
 
 -- | Parser de banderas
-parseMode :: Parser (Mode, Bool)
-parseMode = (,) <$>
+parseMode :: Parser (Mode, Bool, Bool)
+parseMode = (,,) <$>
   (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
   <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
   <|> flag' CEK (long "cek" <> short 'c' <> help "Ejecutar en la CEK")
   <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
   <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
   <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
-  <|> flag Eval        Eval        (long "eval" <> short 'e' <> help "Evaluar programa")
+  <|> flag Eval Eval (long "eval" <> short 'e' <> help "Evaluar programa")
   -- <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
   -- <|> flag' Canon ( long "canon" <> short 'n' <> help "Imprimir canonicalización")
   -- <|> flag' Assembler ( long "assembler" <> short 'a' <> help "Imprimir Assembler resultante")
   -- <|> flag' Build ( long "build" <> short 'b' <> help "Compilar")
     )
-   <*> pure False
-   -- reemplazar por la siguiente línea para habilitar opción
-   -- <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
+   <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
+   <*> flag False True (long "profile" <> short 'p' <> help "Muestra datos de profilling")
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
-parseArgs :: Parser (Mode, Bool, [FilePath])
-parseArgs = (\(a,b) c -> (a,b,c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
+parseArgs :: Parser (Mode, Bool, Bool, [FilePath])
+parseArgs = (\(a,b, c) d -> (a, b, c, d)) <$> parseMode <*> many (argument str (metavar "FILES..."))
 
 main :: IO ()
 main = execParser opts >>= go
@@ -75,11 +74,11 @@ main = execParser opts >>= go
      <> progDesc "Compilador de FD4"
      <> header "Compilador de FD4 de la materia Compiladores 2023" )
 
-    go :: (Mode, Bool, [FilePath]) -> IO ()
-    go (Interactive, opt, files) = runOrFail (Conf opt Interactive) (runInputT defaultSettings (repl files))
-    go (InteractiveCEK, opt, files) = runOrFail (Conf opt InteractiveCEK) (runInputT defaultSettings (repl files))
-    go (RunVM, opt, files) = runOrFail (Conf opt RunVM) $ runVM $ files!!0
-    go (m, opt, files) = runOrFail (Conf opt m) $ mapM_ compileFile files
+    go :: (Mode, Bool, Bool, [FilePath]) -> IO ()
+    go (Interactive, opt, pro, files) = runOrFail (Conf opt pro Interactive) (runInputT defaultSettings (repl files))
+    go (InteractiveCEK, opt, pro, files) = runOrFail (Conf opt pro InteractiveCEK) (runInputT defaultSettings (repl files))
+    go (RunVM, opt, pro, files) = runOrFail (Conf opt pro RunVM) $ runVM $ head files
+    go (m, opt, pro, files) = runOrFail (Conf opt pro m) $ mapM_ compileFile files
 
 runOrFail :: Conf -> FD4 a -> IO a
 runOrFail c m = do
@@ -97,9 +96,11 @@ repl args = do
   lift $ catchErrors $ mapM_ compileFile args
   s <- lift get
   m <- lift getMode
+  opt <- lift getOpt
+  pro <- lift getPro
   when (inter s) $ liftIO $ putStrLn
     ( "Entorno interactivo para FD4. \n"
-    ++ "Modo: " ++ show m ++ "\n"
+    ++ "Modo: " ++ show m ++ ", opt: " ++ show opt ++ ", pro: " ++ show pro ++ "\n"
     ++ "Escriba :? para recibir ayuda.")
   loop
   where
@@ -131,18 +132,22 @@ compileFile f = do
   i <- getInter
   setInter False
   decls <- loadFile f
+  -- Aca optimizacion
+  mdecls <- mapM elabSDecl decls
   case m of
     Bytecompile -> do
       printFD4 ("Abriendo modo Bytecompile " ++ f)
-      mdecls <- mapM elabSDecl decls
-      term <- translateDecl (filter (\x -> not $ isNothing x) mdecls)
+      -- decls <- mapM (elab . declBody . fromJust) (filter isJust (mapM elabSDecl decls))
+      term <- translateDecl (filter isJust mdecls)
       bytecode <- bc (elab term)
-      printFD4 $ show (showOps bytecode)
+      -- printFD4 $ show (showOps bytecode)
       liftIO $ bcWrite bytecode bcfout
+      -- Profilling de Bytecode
       printFD4 ("Compilacion exitosa a " ++ bcfout)
     _ -> do
       printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
-      mapM_ handleDecl decls
+      -- Profilling de CEK
+      mapM_ handleDecl mdecls
   setInter i
   where
     bcfout = head (splitOn "." f) ++ ".bc"
@@ -163,11 +168,10 @@ evalDecl (Decl p x ty e) = do
   return (Decl p x ty e')
 
 -- | Maneja una declaración superficial
-handleDecl ::  MonadFD4 m => SDecl -> m ()
-handleDecl d = do
+handleDecl ::  MonadFD4 m => Maybe (Decl STerm) -> m ()
+handleDecl md = do
   m <- getMode
-  mdecl <- elabSDecl d
-  case mdecl of
+  case md of
     Nothing -> return ()
     Just decl ->
       case m of
@@ -275,7 +279,9 @@ compilePhrase :: MonadFD4 m => String -> m ()
 compilePhrase x = do
   dot <- parseIO "<interactive>" declOrTm x
   case dot of
-    Left d  -> handleDecl d
+    Left d  -> do
+      md <- elabSDecl d 
+      handleDecl md
     Right t -> handleTerm t
 
 -- | Evalua un término superficial
@@ -321,7 +327,7 @@ typeCheckPhrase x = do
 runVM :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
 runVM f = do
   b <- liftIO $ bcRead f
-  t1 <- liftIO $ getCPUTime
+  t1 <- liftIO getCPUTime
   runBC b
-  t2 <- liftIO $ getCPUTime
-  printFD4 $ "Tiempo de ejecución de Bytecode: " ++ show ((fromIntegral (t2-t1)) / (10^12)) ++ " segundos"
+  t2 <- liftIO getCPUTime
+  printFD4 $ "Tiempo de ejecución de Bytecode: " ++ show (fromIntegral (t2-t1) / (10^12)) ++ " segundos"

@@ -1,2 +1,2 @@
-let rec f(x : Nat):Nat = ifz x then 0 else (x + (f (x-1))) 
-let x : Nat = print "x= " (f 8)
+let x:Nat = let z:Nat = 2 in 3
+let j:Nat = print "x= " x 

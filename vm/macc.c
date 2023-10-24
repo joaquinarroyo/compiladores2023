@@ -284,7 +284,7 @@ void run(code init_c)
 		case TAILCALL: {
 			value i = *--s;
 			value fun = *--s;
-			e = env_push(e, fun);
+			e = fun.clo.clo_env;
 			e = env_push(e, i);
 			c = fun.clo.clo_body;
 			break;

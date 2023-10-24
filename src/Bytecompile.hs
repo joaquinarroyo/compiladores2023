@@ -186,9 +186,6 @@ tc term = case term of
     t1' <- bc' t1
     t2' <- tc t2
     return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
-  _ -> do
-    term' <- bc' term
-    return $ term' ++ [RETURN] 
 
 -- | Bytecode Vals
 data ValBytecode =
@@ -238,7 +235,8 @@ runBC' (CJUMP:i:xs) env ((I c):stack)       =
   case c of
     0 -> runBC' xs env stack
     _ -> runBC' (drop i xs) env stack
-runBC' (TAILCALL:xs) env (v:(Fun ef cf):stack) = runBC' cf (v:ef) stack
+runBC' (TAILCALL:xs) env (v:(Fun ef cf):stack) = 
+  runBC' cf (v:ef) stack
 
 -- caso de fallo
 runBC' i env stack = do

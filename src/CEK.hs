@@ -7,8 +7,8 @@ module CEK ( seek ) where
 -}
 
 import Common ( Pos )
-import Lang 
-import MonadFD4 ( MonadFD4, failFD4, printFD4, lookupDecl )
+import Lang
+import MonadFD4 ( MonadFD4, failFD4, printFD4, lookupDecl, getPro )
 import Eval ( semOp )
 
 -- | Tipo de dato para los valores
@@ -23,7 +23,7 @@ instance (Show info, Show var) => Show (ValCEK info var) where
 data ClosCEK info var =
     ClosFun info Env (Name, Ty) (Scope info var)
   | ClosFix info Env (Name, Ty) (Name, Ty) (Scope2 info var)
-  deriving Show 
+  deriving Show
 
 -- | Info
 type Info = (Pos, Ty)
@@ -46,45 +46,59 @@ data Frame =
 seek :: MonadFD4 m => TTerm -> m TTerm
 seek t  = do
   v <- seek' t [] []
-  v' <- valCEK2TTerm v
-  return v'
- 
+  valCEK2TTerm v
+
 -- | Funcion seek de la maquina CEK
 seek' :: MonadFD4 m => TTerm -> Env -> [Frame] -> m (ValCEK Info Var)
-seek' (Print _ s t) env kont                = seek' t env (PrintFrame s:kont)
-seek' (BinaryOp _ op t1 t2) env kont        = seek' t1 env (RBinFrame env op t2:kont)
-seek' (IfZ _ t1 t2 t3) env kont             = seek' t1 env (IfZFrame env t2 t3:kont)
-seek' (App _ t1 t2) env kont                = seek' t1 env (KArg env t2:kont)
-seek' (V _ (Bound i)) env kont              = destroy (env!!i) kont
-seek' (V _ (Global n)) env kont             = do
-  mt <- lookupDecl n
-  case mt of
-    Just t -> seek' t env kont
-    Nothing -> failFD4 "seek: no deberia llegar una variable global que no este en el entorno"
-seek' (Const i n) env kont                  = destroy (N i n) kont
-seek' (Lam i n ty scope) env kont           = destroy (Clos $ ClosFun i env (n, ty) scope) kont
-seek' (Fix i n1 ty1 n2 ty2 scope) env kont  = destroy (Clos $ ClosFix i env (n1, ty1) (n2, ty2) scope) kont
-seek' (Let i n ty t scope) env kont         = seek' t env (LetFrame env scope:kont)
+seek' term env kont = do
+  pro <- getPro
+  if pro
+    then do
+      -- modificamos el profile
+      seek''
+    else seek''
+  where
+    seek'' = case term of
+      (Print _ s t) -> seek' t env (PrintFrame s:kont)
+      (BinaryOp _ op t1 t2) -> seek' t1 env (RBinFrame env op t2:kont)
+      (IfZ _ t1 t2 t3) -> seek' t1 env (IfZFrame env t2 t3:kont)
+      (App _ t1 t2) -> seek' t1 env (KArg env t2:kont)
+      (V _ (Bound i)) -> destroy (env!!i) kont
+      (V _ (Global n)) -> do
+        mt <- lookupDecl n
+        case mt of
+          Just t -> seek' t env kont
+          Nothing -> failFD4 "seek: no deberia llegar una variable global que no este en el entorno"
+      (Const i n) -> destroy (N i n) kont
+      (Lam i n ty scope) -> destroy (Clos $ ClosFun i env (n, ty) scope) kont
+      (Fix i n1 ty1 n2 ty2 scope) -> destroy (Clos $ ClosFix i env (n1, ty1) (n2, ty2) scope) kont
+      (Let i n ty t scope) -> seek' t env (LetFrame env scope:kont)
+
+-- 
+destroy :: MonadFD4 m => ValCEK Info Var -> [Frame] -> m (ValCEK Info Var)
+destroy v f = do
+  pro <- getPro
+  destroy' v f
 
 -- | Funcion destroy de la maquina CEK
-destroy :: MonadFD4 m => ValCEK Info Var -> [Frame] -> m (ValCEK Info Var)
-destroy v []                                                  = do
+destroy' :: MonadFD4 m => ValCEK Info Var -> [Frame] -> m (ValCEK Info Var)
+destroy' v []                                                  = do
   return v
-destroy v ((PrintFrame s):kont)                               = do
+destroy' v ((PrintFrame s):kont)                               = do
   printFD4 (s++show v)
-  destroy v kont
-destroy (N i n) ((RBinFrame env op u):kont)                   = seek' u env (LBinFrame op (N i n):kont)
-destroy (N i (CNat n')) ((LBinFrame op (N _ (CNat n)):kont))  = destroy (N i (CNat $ semOp op n n')) kont
-destroy (N _ (CNat 0)) ((IfZFrame env t e):kont)              = seek' t env kont
-destroy (N _ _) ((IfZFrame env t e):kont)                     = seek' e env kont
-destroy (Clos c) ((KArg env t):kont)                          = seek' t env (ClosFrame c:kont)
-destroy v (ClosFrame (ClosFun _ env _ (Sc1 t)):kont)          = seek' t (v:env) kont
-destroy v (ClosFrame c@(ClosFix _ env _ _ (Sc2 t)):kont)      = let f = Clos c
+  destroy' v kont
+destroy' (N i n) ((RBinFrame env op u):kont)                   = seek' u env (LBinFrame op (N i n):kont)
+destroy' (N i (CNat n')) ((LBinFrame op (N _ (CNat n)):kont))  = destroy' (N i (CNat $ semOp op n n')) kont
+destroy' (N _ (CNat 0)) ((IfZFrame env t e):kont)              = seek' t env kont
+destroy' (N _ _) ((IfZFrame env t e):kont)                     = seek' e env kont
+destroy' (Clos c) ((KArg env t):kont)                          = seek' t env (ClosFrame c:kont)
+destroy' v (ClosFrame (ClosFun _ env _ (Sc1 t)):kont)          = seek' t (v:env) kont
+destroy' v (ClosFrame c@(ClosFix _ env _ _ (Sc2 t)):kont)      = let f = Clos c
                                                                 in seek' t (v:f:env) kont
-destroy v (LetFrame env (Sc1 scope):kont)                     = seek' scope (v:env) kont
+destroy' v (LetFrame env (Sc1 scope):kont)                     = seek' scope (v:env) kont
 
 -- | Funcion auxiliar que convierte un valor de la maquina CEK a un termino
-valCEK2TTerm :: MonadFD4 m => ValCEK Info Var -> m TTerm 
+valCEK2TTerm :: MonadFD4 m => ValCEK Info Var -> m TTerm
 valCEK2TTerm (N i c)                                          = return $ Const i c
 valCEK2TTerm (Clos (ClosFun i env (n, ty) scope))             = do
   scope' <- replaceEnvScope scope (length env) env
@@ -114,12 +128,11 @@ replaceEnvScope2 (Sc2 t) c env                            = do
 
 -- | Funcion auxiliar para el reemplazo de valores del env en los terminos
 replaceEnv' :: MonadFD4 m => TTerm -> Int -> Env -> m TTerm
-replaceEnv' t c []                            = return t 
+replaceEnv' t c []                            = return t
 replaceEnv' v@(V _ (Bound i)) c env           | c-i < length env  = do
                                                   let env' = reverse env
-                                                  v' <- valCEK2TTerm $ env'!!(c-i)
-                                                  return v' 
-                                              | otherwise         = return $ v
+                                                  valCEK2TTerm $ env'!!(c-i)
+                                              | otherwise         = return v
 replaceEnv' v@(V _ (Free n)) _ _              = failFD4 "replaceEnv': Free"
 replaceEnv' v@(V _ (Global n)) _ _            = return v
 replaceEnv' c@(Const _ _) _ _ = return c
