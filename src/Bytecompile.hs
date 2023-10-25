@@ -186,6 +186,9 @@ tc term = case term of
     t1' <- bc' t1
     t2' <- tc t2
     return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
+  _ -> do
+    term' <- bc' term
+    return $ term' ++ [RETURN]
 
 -- | Bytecode Vals
 data ValBytecode =

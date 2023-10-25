@@ -4,4 +4,4 @@ let rec ack (m : Nat) (n : Nat) : Nat =
     else (ifz n
          then ack (m-1) 1
          else ack (m-1) (ack m (n - 1)))
-let x : Nat = print "ack 3 2 := " (ack 3 2)
+let ret : Nat = print "ack 3 2 := " (ack 3 2)
