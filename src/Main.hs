@@ -21,7 +21,7 @@ import Data.List.Split ( splitOn )
 import Data.Char ( isSpace )
 import Control.Exception ( catch , IOException )
 import System.IO ( hPrint, stderr, hPutStrLn )
-import Data.Maybe ( fromMaybe, isJust )
+import Data.Maybe ( fromMaybe, isJust, fromJust )
 
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
@@ -30,7 +30,7 @@ import Global
 import Errors
 import Lang
 import Parse ( P, tm, program, declOrTm, runP )
-import Elab ( elab, elabSDecl, elabSynTy )
+import Elab ( elab, elabSDecl, elabSynTy, elabDecl )
 import Eval ( eval )
 import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
@@ -38,7 +38,8 @@ import TypeChecker ( tc, tcDecl )
 import System.CPUTime ( getCPUTime )
 
 import CEK ( seek )
-import Bytecompile ( translateDecl, bc, bcWrite, bcRead, runBC, showOps )
+import Bytecompile ( openModule, bc, bcWrite, bcRead, runBC, showOps )
+import Optimizer (optimize)
 
 
 prompt :: String
@@ -132,14 +133,16 @@ compileFile f = do
   i <- getInter
   setInter False
   decls <- loadFile f
-  -- Aca optimizacion
   mdecls <- mapM elabSDecl decls
+  tdecls <- mapM ((tcDecl . elabDecl) . fromJust) mdecls
+  -- meter optimizacion sobre tdecls
+  opt <- getOpt
+  odecls <- if opt then mapM optimize tdecls else return tdecls
   case m of
     Bytecompile -> do
       printFD4 ("Abriendo modo Bytecompile " ++ f)
-      -- decls <- mapM (elab . declBody . fromJust) (filter isJust (mapM elabSDecl decls))
-      term <- translateDecl (filter isJust mdecls)
-      bytecode <- bc (elab term)
+      term <- openModule tdecls
+      bytecode <- bc term
       -- printFD4 $ show (showOps bytecode)
       liftIO $ bcWrite bytecode bcfout
       -- Profilling de Bytecode
@@ -147,7 +150,7 @@ compileFile f = do
     _ -> do
       printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
       -- Profilling de CEK
-      mapM_ handleDecl mdecls
+      mapM_ evalDecl tdecls
   setInter i
   where
     bcfout = head (splitOn "." f) ++ ".bc"
@@ -168,35 +171,22 @@ evalDecl (Decl p x ty e) = do
   return (Decl p x ty e')
 
 -- | Maneja una declaración superficial
-handleDecl ::  MonadFD4 m => Maybe (Decl STerm) -> m ()
-handleDecl md = do
+handleDecl ::  MonadFD4 m => Decl TTerm -> m ()
+handleDecl tdecl = do
   m <- getMode
-  case md of
-    Nothing -> return ()
-    Just decl ->
-      case m of
-        Interactive -> hanldeInteractiveDecl decl
-        InteractiveCEK -> hanldeInteractiveDecl decl
-        Typecheck -> do
-          f <- getLastFile
-          printFD4 $ "Chequeando tipos de " ++ f
-          td <- typecheckDecl decl
-          addDecl td
-          -- opt <- getOpt
-          -- td' <- if opt then optimize td else td
-          ppterm <- ppDecl td  --td'
-          printFD4 ppterm
-        _ -> do -- tanto Eval como CEK
-          td <- typecheckDecl decl
-          -- td' <- if opt then optimizeDecl td else return td
-          ed <- evalDecl td
-          addDecl ed
-  where
-    typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
-    typecheckDecl (Decl p x ty t) = tcDecl (Decl p x ty (elab t))
-    hanldeInteractiveDecl decl = do
-      (Decl p x ty tt) <- typecheckDecl decl
-      addDecl (Decl p x ty tt)
+  case m of
+    Interactive -> addDecl tdecl
+    InteractiveCEK -> addDecl tdecl
+    Typecheck -> do
+      f <- getLastFile
+      printFD4 $ "Chequeando tipos de " ++ f
+      addDecl tdecl
+      ppterm <- ppDecl tdecl
+      printFD4 ppterm
+    _ -> do -- tanto Eval como CEK
+      -- td' <- if opt then optimizeDecl td else return td
+      ed <- evalDecl tdecl
+      addDecl ed
 
 data Command = Compile CompileForm
              | PPrint String
@@ -279,9 +269,13 @@ compilePhrase :: MonadFD4 m => String -> m ()
 compilePhrase x = do
   dot <- parseIO "<interactive>" declOrTm x
   case dot of
-    Left d  -> do
-      md <- elabSDecl d 
-      handleDecl md
+    Left d -> do
+      md <- elabSDecl d
+      case md of
+        Nothing -> return ()
+        Just decl -> do
+          tdecl <- tcDecl (elabDecl decl)
+          handleDecl tdecl
     Right t -> handleTerm t
 
 -- | Evalua un término superficial

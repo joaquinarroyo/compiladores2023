@@ -8,7 +8,7 @@
 -}
 module TypeChecker (
    tc,
-   tcDecl 
+   tcDecl
    ) where
 
 import Lang
@@ -24,16 +24,16 @@ tc :: MonadFD4 m => Term         -- ^ término a chequear
                  -> [(Name,Ty)]  -- ^ entorno de tipado
                  -> m TTerm        -- ^ tipo del término
 tc (V p (Bound _)) _        = failPosFD4 p "typecheck: No deberia haber variables Bound"
-tc (V p (Free n)) bs        = 
+tc (V p (Free n)) bs        =
   case lookup n bs of
     Nothing -> failPosFD4 p $ "Variable no declarada "++ppName n
-    Just ty -> return (V (p,ty) (Free n)) 
-tc (V p (Global n)) bs      = 
+    Just ty -> return (V (p,ty) (Free n))
+tc (V p (Global n)) bs      =
   case lookup n bs of
     Nothing -> failPosFD4 p $ "Variable no declarada "++ppName n
     Just ty -> return (V (p,ty) (Global n))
 tc (Const p (CNat n)) _     = return (Const (p, NatTy Nothing) (CNat n))
-tc (Print p str t) bs       = do 
+tc (Print p str t) bs       = do
       tt <- tc t bs
       expect (NatTy Nothing) tt
       return (Print (p, NatTy Nothing) str tt)
@@ -79,20 +79,20 @@ tc (BinaryOp p op t u) bs   = do
 typeError :: MonadFD4 m => TTerm   -- ^ término que se está chequeando  
                         -> String -- ^ mensaje de error
                         -> m a
-typeError t s = do 
+typeError t s = do
   ppt <- pp t
   failPosFD4 (getPos t) $ "Error de tipo en "++ppt++"\n"++s
- 
+
 -- | 'expect' chequea que el tipo esperado sea igual al que se obtuvo
 -- y lanza un error si no lo es.
 expect :: MonadFD4 m => Ty    -- ^ tipo esperado
                      -> TTerm
                      -> m TTerm
-expect ty tt = 
+expect ty tt =
   let ty' = getTy tt
-  in if ty == ty' 
-    then return tt 
-    else typeError tt $ 
+  in if ty == ty'
+    then return tt
+    else typeError tt $
       "Tipo esperado: "++ ppTy ty
       ++"\npero se obtuvo: "++ ppTy ty'
 
@@ -113,6 +113,8 @@ tcDecl (Decl p n ty t) = do
     Nothing -> do -- no está declarado 
       s <- get
       tt <- tc t (tyEnv s)
-      expect ty tt         
-      return (Decl p n ty tt)
+      expect ty tt
+      let decl = Decl p n ty tt
+      _ <- addDecl decl
+      return decl
     Just _  -> failPosFD4 p $ n ++" ya está declarado"

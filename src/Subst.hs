@@ -24,8 +24,8 @@ varChanger :: (Int -> info -> Name -> Tm info Var) --que hacemos con las variabl
            -> Tm info Var -> Tm info Var
 varChanger local bound t = go 0 t where
   go n   (V p (Bound i)) = bound n p i
-  go n   (V p (Free x)) = local n p x 
-  go n   (V p (Global x)) = V p (Global x) 
+  go n   (V p (Free x)) = local n p x
+  go n   (V p (Global x)) = V p (Global x)
   go n (Lam p y ty (Sc1 t))   = Lam p y ty (Sc1 (go (n+1) t))
   go n (App p l r)   = App p (go n l) (go n r)
   go n (Fix p f fty x xty (Sc2 t)) = Fix p f fty x xty (Sc2 (go (n+2) t))
@@ -65,7 +65,7 @@ open2 nm1 nm2 (Sc2 t) = varChanger (\_ p n -> V p (Free n)) bnd t
 -- nombres frescos.
 subst :: Tm info Var -> Scope info Var -> Tm info Var
 subst n (Sc1 m) = varChanger (\_ p n -> V p (Free n)) bnd m
-   where bnd depth p i 
+   where bnd depth p i
              | i <  depth = V p (Bound i)
              | i == depth = n
              | otherwise  = abort "substN: M is not LC"
@@ -74,7 +74,7 @@ subst n (Sc1 m) = varChanger (\_ p n -> V p (Free n)) bnd m
 -- Notar que t es un Scope con dos índices que escapan el término.
 subst2 :: Tm info Var -> Tm info Var -> Scope2 info Var -> Tm info Var
 subst2 n1 n2 (Sc2 m) = varChanger (\_ p n -> V p (Free n)) bnd m
-   where bnd depth p i 
+   where bnd depth p i
              | i <  depth = V p (Bound i)
              | i == depth = n2
              | i == depth+1 = n1
@@ -94,3 +94,19 @@ close2 nm1 nm2 t = Sc2 (varChanger lcl (\_ p i -> V p (Bound i)) t)
   where lcl depth p y | y == nm2 = V p (Bound depth)
                       | y == nm1 = V p (Bound (depth + 1))
                       | otherwise = V p (Free y)
+
+--
+varChangerGlobal :: (Int -> info -> Name -> Tm info Var) --que hacemos con las variables localmente libres
+                    -> Tm info Var -> Tm info Var
+varChangerGlobal local t = go 0 t where
+  go n   (V p (Bound i)) = V p (Bound i)
+  go n   (V p (Free x)) = V p (Free x)
+  go n   (V p (Global x)) = local n p x
+  go n (Lam p y ty (Sc1 t))   = Lam p y ty (Sc1 (go (n+1) t))
+  go n (App p l r)   = App p (go n l) (go n r)
+  go n (Fix p f fty x xty (Sc2 t)) = Fix p f fty x xty (Sc2 (go (n+2) t))
+  go n (IfZ p c t e) = IfZ p (go n c) (go n t) (go n e)
+  go n t@(Const _ _) = t
+  go n (Print p str t) = Print p str (go n t)
+  go n (BinaryOp p op t u) = BinaryOp p op (go n t) (go n u)
+  go n (Let p v vty m (Sc1 o)) = Let p v vty (go n m) (Sc1 (go (n+1) o))

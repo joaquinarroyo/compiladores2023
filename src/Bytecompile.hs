@@ -15,7 +15,7 @@
   una implementación de la Macchina para ejecutar el bytecode.
 -}
 module Bytecompile
-  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, translateDecl, showOps )
+  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, openModule, showOps )
  where
 
 import Lang
@@ -26,6 +26,8 @@ import Data.Binary.Put ( putWord32le )
 import Data.Binary.Get ( getWord32le, isEmpty )
 import Data.List ( intercalate )
 import Data.Char
+import Subst
+import GHC.TypeLits (Mod)
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -129,12 +131,12 @@ bcRead :: FilePath -> IO Bytecode
 bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
 
 -- | Transforma un Term en Bytecode
-bc :: MonadFD4 m => Term -> m Bytecode
+bc :: MonadFD4 m => TTerm -> m Bytecode
 bc t = do
   t' <- bc' t
   return $ t' ++ [STOP]
 
-bc' :: MonadFD4 m => Term -> m Bytecode
+bc' :: MonadFD4 m => TTerm -> m Bytecode
 bc' term = case term of
   (V _ (Bound i))                 -> return [ACCESS, i]
   (V _ (Free n))                  -> failFD4 "bc: Free"
@@ -170,7 +172,7 @@ bc' term = case term of
     t2' <- bc' t2
     return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
 
-tc :: MonadFD4 m => Term -> m Bytecode
+tc :: MonadFD4 m => TTerm -> m Bytecode
 tc term = case term of
   (App _ t1 t2) -> do
     t1' <- bc' t1
@@ -231,14 +233,14 @@ runBC' (PRINT:xs) env stack                 =
       s = bc2string msg
   in do printFD4nobreak s
         runBC' xs' env stack
-runBC' (PRINTN:xs) env s@(I i:stack)        = 
+runBC' (PRINTN:xs) env s@(I i:stack)        =
   do printFD4 (show i)
      runBC' xs env s
 runBC' (CJUMP:i:xs) env ((I c):stack)       =
   case c of
     0 -> runBC' xs env stack
     _ -> runBC' (drop i xs) env stack
-runBC' (TAILCALL:xs) env (v:(Fun ef cf):stack) = 
+runBC' (TAILCALL:xs) env (v:(Fun ef cf):stack) =
   runBC' cf (v:ef) stack
 
 -- caso de fallo
@@ -248,13 +250,21 @@ runBC' i env stack = do
   printFD4 $ show stack
   failFD4 "runBC': non-exhaustive patterns"
 
+--
+type Module = [Decl TTerm]
+
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
-translateDecl :: MonadFD4 m => [Maybe (Decl STerm)] -> m STerm
-translateDecl [Just (Decl _ _ _ t)] = return t
-translateDecl (Just d:xs)           = do
-                                    xs' <- translateDecl xs
-                                    return $ translateDecl' d xs'
+openModule :: MonadFD4 m => Module -> m TTerm
+openModule [Decl _ n _ t] = return $ global2free n t
+openModule (d:xs)         =
+  do
+    xs' <- openModule xs
+    return $ openModule' d xs'
 
 -- | Traduce una declaracion a una expresion "let in"
-translateDecl' :: Decl STerm -> (STerm -> STerm)
-translateDecl' (Decl i n ty t) = SLet i (n, ty) t
+openModule' :: Decl TTerm -> (TTerm -> TTerm)
+openModule' (Decl i n ty t) s = Let (i, ty) n ty t (close n (global2free n s))
+
+-- |
+global2free :: Name -> TTerm -> TTerm
+global2free name = varChangerGlobal (\v p n -> if n == name then V p (Free n) else V p (Global n))
