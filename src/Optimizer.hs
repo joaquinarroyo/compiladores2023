@@ -1,6 +1,6 @@
 module Optimizer where
-import MonadFD4 (MonadFD4)
-import Lang (TTerm, Decl (..))
+import MonadFD4 ( MonadFD4 )
+import Lang ( TTerm )
 
 maxIt :: Int
 maxIt = 10

@@ -11,37 +11,6 @@ module Global where
 
 import Lang
 
--- |
-data Profile = CEKProfile { cek :: Int } | BytecodeProfile { bytecode :: (Int, Int, Int) } | NoneProfile
-  deriving Show
-
-initProfile :: Mode -> Profile
-initProfile m = 
-  case m of
-    CEK -> CEKProfile 0
-    Bytecompile -> BytecodeProfile (0, 0, 0)
-    _ -> NoneProfile
-
--- |
-data GlEnv = GlEnv {
-  inter :: Bool,        --  ^ True, si estamos en modo interactivo.
-                        -- Este parámetro puede cambiar durante la ejecución:
-                        -- Es falso mientras se cargan archivos, pero luego puede ser verdadero.
-  lfile :: String,      -- ^ Último archivo cargado.
-  cantDecl :: Int,      -- ^ Cantidad de declaraciones desde la última carga
-  glb :: [Decl TTerm],  -- ^ Entorno con declaraciones globales
-  tysin :: [SDecl],     -- ^ Entorno con declaraciones de sinonimos de tipos
-  profile :: Profile
-}
-
--- ^ Entorno de tipado de declaraciones globales
-tyEnv :: GlEnv ->  [(Name,Ty)]
-tyEnv g = map (\(Decl _ n ty b) -> (n, ty))  (glb g)
-
--- ^ Entorno de sinonimos de tipos
-tySinEnv :: GlEnv -> [(Name, Ty)]
-tySinEnv g = map (\(DirectTypeDecl _ n ty) -> (n, ty))  (tysin g)
-
 {-
  Tipo para representar las banderas disponibles en línea de comando.
 -}
@@ -65,7 +34,35 @@ data Conf = Conf {
   mode :: Mode
 }
 
--- | Valor del estado inicial
-initialEnv :: Mode -> GlEnv
-initialEnv m = GlEnv False "" 0 [] [] (initProfile m)
+-- |
+data GlEnv = GlEnv {
+  inter :: Bool,        --  ^ True, si estamos en modo interactivo.
+                        -- Este parámetro puede cambiar durante la ejecución:
+                        -- Es falso mientras se cargan archivos, pero luego puede ser verdadero.
+  lfile :: String,      -- ^ Último archivo cargado.
+  cantDecl :: Int,      -- ^ Cantidad de declaraciones desde la última carga
+  glb :: [Decl TTerm],  -- ^ Entorno con declaraciones globales
+  tysin :: [SDecl]      -- ^ Entorno con declaraciones de sinonimos de tipos
+}
 
+-- | Entorno de tipado de declaraciones globales
+tyEnv :: GlEnv ->  [(Name,Ty)]
+tyEnv g = map (\(Decl _ n ty b) -> (n, ty))  (glb g)
+
+-- | Entorno de sinonimos de tipos
+tySinEnv :: GlEnv -> [(Name, Ty)]
+tySinEnv g = map (\(DirectTypeDecl _ n ty) -> (n, ty))  (tysin g)
+
+
+-- | Valor del estado inicial
+initialEnv :: GlEnv
+initialEnv = GlEnv False "" 0 [] []
+
+-- | Profile data
+data Profile = CEKProfile { cekSteps :: Int } | BytecodeProfile { bcOps :: Int, maxStackSize :: Int, totalClousures :: Int } | NoneProfile
+  deriving Show
+
+getProfile :: Mode -> Profile
+getProfile CEK = CEKProfile 0
+getProfile Bytecompile = BytecodeProfile 0 0 0
+getProfile _ = NoneProfile

@@ -51,6 +51,7 @@ import Errors ( Error(..) )
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.Writer
 import System.IO
 
 
@@ -159,7 +160,7 @@ catchErrors c = catchError (Just <$> c)
 -- El transformador de mónadas @StateT GlEnv@ agrega la mónada @ExcepT Error IO@ la posibilidad de manejar un estado de tipo 'Global.GlEnv'.
 type FD4 = ReaderT Conf (StateT GlEnv (ExceptT Error IO))
 
--- type FD4Profile = ReaderT Conf (StateT GlEnv (ExceptT Error IO))
+type FD4Profile = WriterT Profile (ReaderT Conf (StateT GlEnv (ExceptT Error IO))) -- ver esto
 
 -- | Esta es una instancia vacía, ya que 'MonadFD4' no tiene funciones miembro.
 instance MonadFD4 FD4 where
@@ -170,14 +171,7 @@ instance MonadFD4 FD4 where
 
 -- 'runFD4\'' corre una computación de la mónad 'FD4' en el estado inicial 'Global.initialEnv' 
 runFD4' :: FD4 a -> Conf -> IO (Either Error (a, GlEnv))
-runFD4' c conf = runExceptT $ runStateT (runReaderT c conf) (initialEnv $ mode conf)
+runFD4' c conf = runExceptT $ runStateT (runReaderT c conf) initialEnv
 
 runFD4:: FD4 a -> Conf -> IO (Either Error a)
 runFD4 c conf = fmap fst <$> runFD4' c conf
-
--- runFD4Profile
--- runFD4Profile' :: FD4Profile a -> Conf -> IO (Either Error (a, GlEnv))
--- runFD4Profile' c conf = runExceptT $ runStateT (runReaderT c conf) initialEnv
-
--- runFD4Profile:: FD4Profile a -> Conf -> IO (Either Error a)
--- runFD4Profile c conf = fmap fst <$> runFD4Profile' c conf
