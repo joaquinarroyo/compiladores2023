@@ -81,7 +81,7 @@ getPro :: MonadFD4 m => m Bool
 getPro = asks pro
 
 getMode :: MonadFD4 m => m Mode
-getMode = asks modo
+getMode = asks mode
 
 setInter :: MonadFD4 m => Bool -> m ()
 setInter b = modify (\s-> s {inter = b})
@@ -170,7 +170,7 @@ instance MonadFD4 FD4 where
 
 -- 'runFD4\'' corre una computación de la mónad 'FD4' en el estado inicial 'Global.initialEnv' 
 runFD4' :: FD4 a -> Conf -> IO (Either Error (a, GlEnv))
-runFD4' c conf = runExceptT $ runStateT (runReaderT c conf) initialEnv
+runFD4' c conf = runExceptT $ runStateT (runReaderT c conf) (initialEnv $ mode conf)
 
 runFD4:: FD4 a -> Conf -> IO (Either Error a)
 runFD4 c conf = fmap fst <$> runFD4' c conf

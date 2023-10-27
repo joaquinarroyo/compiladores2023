@@ -15,7 +15,7 @@
   una implementación de la Macchina para ejecutar el bytecode.
 -}
 module Bytecompile
-  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, openModule, showOps )
+  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps, bytecompile )
  where
 
 import Lang
@@ -27,7 +27,6 @@ import Data.Binary.Get ( getWord32le, isEmpty )
 import Data.List ( intercalate )
 import Data.Char
 import Subst
-import GHC.TypeLits (Mod)
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -250,21 +249,18 @@ runBC' i env stack = do
   printFD4 $ show stack
   failFD4 "runBC': non-exhaustive patterns"
 
---
+-- | Modulo
 type Module = [Decl TTerm]
 
+-- | Bytecompile
+bytecompile :: MonadFD4 m => Module -> m Bytecode
+bytecompile m = bc $ openModule m
+
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
-openModule :: MonadFD4 m => Module -> m TTerm
-openModule [Decl _ n _ t] = return $ global2free n t
-openModule (d:xs)         =
-  do
-    xs' <- openModule xs
-    return $ openModule' d xs'
+openModule :: Module -> TTerm
+openModule [Decl _ n _ t]      = global2free n t
+openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty t (close n (global2free n (openModule xs))) -- ver si hace falta hacer global2free sobre 't'
 
--- | Traduce una declaracion a una expresion "let in"
-openModule' :: Decl TTerm -> (TTerm -> TTerm)
-openModule' (Decl i n ty t) s = Let (i, ty) n ty t (close n (global2free n s))
-
--- |
+-- | Cambia las variables globales por variables libres
 global2free :: Name -> TTerm -> TTerm
 global2free name = varChangerGlobal (\v p n -> if n == name then V p (Free n) else V p (Global n))

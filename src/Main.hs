@@ -21,7 +21,7 @@ import Data.List.Split ( splitOn )
 import Data.Char ( isSpace )
 import Control.Exception ( catch , IOException )
 import System.IO ( hPrint, stderr, hPutStrLn )
-import Data.Maybe ( fromMaybe, isJust, fromJust )
+import Data.Maybe ( fromMaybe, fromJust )
 
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
@@ -32,14 +32,14 @@ import Lang
 import Parse ( P, tm, program, declOrTm, runP )
 import Elab ( elab, elabSDecl, elabSynTy, elabDecl )
 import Eval ( eval )
-import PPrint ( pp , ppTy, ppDecl )
+import PPrint ( pp , ppTy )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import System.CPUTime ( getCPUTime )
 
 import CEK ( seek )
-import Bytecompile ( openModule, bc, bcWrite, bcRead, runBC, showOps )
-import Optimizer (optimize)
+import Bytecompile ( bcWrite, bcRead, runBC, bytecompile )
+import Optimizer ( optimize )
 
 
 prompt :: String
@@ -55,7 +55,7 @@ parseMode = (,,) <$>
   <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
   <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
   <|> flag Eval Eval (long "eval" <> short 'e' <> help "Evaluar programa")
-  -- <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
+  <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
   -- <|> flag' Canon ( long "canon" <> short 'n' <> help "Imprimir canonicalización")
   -- <|> flag' Assembler ( long "assembler" <> short 'a' <> help "Imprimir Assembler resultante")
   -- <|> flag' Build ( long "build" <> short 'b' <> help "Compilar")
@@ -78,7 +78,7 @@ main = execParser opts >>= go
     go :: (Mode, Bool, Bool, [FilePath]) -> IO ()
     go (Interactive, opt, pro, files) = runOrFail (Conf opt pro Interactive) (runInputT defaultSettings (repl files))
     go (InteractiveCEK, opt, pro, files) = runOrFail (Conf opt pro InteractiveCEK) (runInputT defaultSettings (repl files))
-    go (RunVM, opt, pro, files) = runOrFail (Conf opt pro RunVM) $ runVM $ head files
+    go (RunVM, opt, pro, files) = runOrFail (Conf opt pro RunVM) $ mapM_ runVM files
     go (m, opt, pro, files) = runOrFail (Conf opt pro m) $ mapM_ compileFile files
 
 runOrFail :: Conf -> FD4 a -> IO a
@@ -129,64 +129,60 @@ loadFile f = do
 -- | Compila un archivo
 compileFile ::  MonadFD4 m => FilePath -> m ()
 compileFile f = do
-  m <- getMode
   i <- getInter
   setInter False
+  m <- getMode
+  printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
   decls <- loadFile f
-  mdecls <- mapM elabSDecl decls
-  tdecls <- mapM ((tcDecl . elabDecl) . fromJust) mdecls
-  -- meter optimizacion sobre tdecls
-  opt <- getOpt
-  odecls <- if opt then mapM optimize tdecls else return tdecls
+  decls' <- mapM handleDecl decls
   case m of
     Bytecompile -> do
-      printFD4 ("Abriendo modo Bytecompile " ++ f)
-      term <- openModule tdecls
-      bytecode <- bc term
-      -- printFD4 $ show (showOps bytecode)
+      bytecode <- bytecompile decls'
       liftIO $ bcWrite bytecode bcfout
-      -- Profilling de Bytecode
       printFD4 ("Compilacion exitosa a " ++ bcfout)
-    _ -> do
-      printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
-      -- Profilling de CEK
-      mapM_ evalDecl tdecls
+    CC -> return ()
+    Typecheck -> printFD4 "Typecheck exitoso"
+    _ -> return ()
   setInter i
   where
-    bcfout = head (splitOn "." f) ++ ".bc"
+    splitF = head $ splitOn "." f
+    bcfout = splitF ++ ".bc"
+    cfout = splitF ++ ".c"
 
+-- | Parsea un archivo
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x =
   case runP p x filename of
     Left e  -> throwError (ParseErr e)
     Right r -> return r
 
--- | Evalua una declaración
-evalDecl :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
-evalDecl (Decl p x ty e) = do
-  m <- getMode
-  e' <- case m of
-    Eval -> eval e
-    CEK -> seek e
-  return (Decl p x ty e')
-
 -- | Maneja una declaración superficial
-handleDecl ::  MonadFD4 m => Decl TTerm -> m ()
-handleDecl tdecl = do
+handleDecl ::  MonadFD4 m => SDecl -> m (Decl TTerm)
+handleDecl sdecl = do
   m <- getMode
+  mdecl <- elabSDecl sdecl
+  let decl = elabDecl (fromJust mdecl)
   case m of
-    Interactive -> addDecl tdecl
-    InteractiveCEK -> addDecl tdecl
+    Interactive -> evalAddDecl eval decl
+    Eval -> evalAddDecl eval decl
+    InteractiveCEK -> evalAddDecl seek decl
+    CEK -> evalAddDecl seek decl
+    Bytecompile -> evalAddDecl return decl
+    CC -> evalAddDecl return decl
     Typecheck -> do
-      f <- getLastFile
-      printFD4 $ "Chequeando tipos de " ++ f
-      addDecl tdecl
-      ppterm <- ppDecl tdecl
-      printFD4 ppterm
-    _ -> do -- tanto Eval como CEK
-      -- td' <- if opt then optimizeDecl td else return td
-      ed <- evalDecl tdecl
-      addDecl ed
+      decl' <- tcDecl decl
+      addDecl decl'
+      return decl'
+  where
+    evalAddDecl :: MonadFD4 m => (TTerm -> m TTerm) -> Decl Term -> m (Decl TTerm)
+    evalAddDecl f d = do
+      tdecl <- tcDecl d 
+      tt <- f (declBody tdecl)
+      opt <- getOpt
+      ott <- if opt then optimize tt else return tt -- optimizacion
+      let otdecl = tdecl {declBody = ott}
+      addDecl otdecl
+      return otdecl
 
 data Command = Compile CompileForm
              | PPrint String
@@ -260,22 +256,16 @@ handleCommand cmd = do
         CompileInteractive e -> compilePhrase e
         CompileFile f -> compileFile f
       return True
-    Reload ->  eraseLastFileDecls >> (getLastFile >>= compileFile) >> return True
-    PPrint e   -> printPhrase e >> return True
-    Type e    -> typeCheckPhrase e >> return True
+    Reload   ->  eraseLastFileDecls >> (getLastFile >>= compileFile) >> return True
+    PPrint e -> printPhrase e >> return True
+    Type e   -> typeCheckPhrase e >> return True
 
 -- | Procesa una expresión
 compilePhrase :: MonadFD4 m => String -> m ()
 compilePhrase x = do
   dot <- parseIO "<interactive>" declOrTm x
   case dot of
-    Left d -> do
-      md <- elabSDecl d
-      case md of
-        Nothing -> return ()
-        Just decl -> do
-          tdecl <- tcDecl (elabDecl decl)
-          handleDecl tdecl
+    Left d  -> void $ handleDecl d
     Right t -> handleTerm t
 
 -- | Evalua un término superficial

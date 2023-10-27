@@ -12,13 +12,15 @@ module Global where
 import Lang
 
 -- |
-data Profile = Profile {
-  cek :: Int,
-  bytecode :: (Int, Int, Int)
-}
+data Profile = CEKProfile { cek :: Int } | BytecodeProfile { bytecode :: (Int, Int, Int) } | NoneProfile
+  deriving Show
 
-initProfile :: Profile
-initProfile = Profile { cek = 0, bytecode = (0, 0, 0) }
+initProfile :: Mode -> Profile
+initProfile m = 
+  case m of
+    CEK -> CEKProfile 0
+    Bytecompile -> BytecodeProfile (0, 0, 0)
+    _ -> NoneProfile
 
 -- |
 data GlEnv = GlEnv {
@@ -51,7 +53,7 @@ data Mode =
   | CEK
   | Bytecompile
   | RunVM
-  -- | CC
+  | CC
   -- | Canon
   -- | Assembler
   -- | Build
@@ -60,10 +62,10 @@ data Mode =
 data Conf = Conf {
   opt :: Bool,          --  ^ True, si estan habilitadas las optimizaciones.
   pro :: Bool,          --  ^ True, si estaa habilitado el profilling.
-  modo :: Mode
+  mode :: Mode
 }
 
 -- | Valor del estado inicial
-initialEnv :: GlEnv
-initialEnv = GlEnv False "" 0 [] [] initProfile
+initialEnv :: Mode -> GlEnv
+initialEnv m = GlEnv False "" 0 [] [] (initProfile m)
 

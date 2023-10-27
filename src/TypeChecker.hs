@@ -114,7 +114,5 @@ tcDecl (Decl p n ty t) = do
       s <- get
       tt <- tc t (tyEnv s)
       expect ty tt
-      let decl = Decl p n ty tt
-      _ <- addDecl decl
-      return decl
+      return (Decl p n ty tt)
     Just _  -> failPosFD4 p $ n ++" ya está declarado"

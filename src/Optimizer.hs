@@ -5,10 +5,8 @@ import Lang (TTerm, Decl (..))
 maxIt :: Int
 maxIt = 10
 
-optimize :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
-optimize d = do
-    o <- optimize' maxIt (declBody d)
-    return $ d {declBody = o}
+optimize :: MonadFD4 m => TTerm -> m TTerm
+optimize t = optimize' maxIt t
 
 optimize' :: MonadFD4 m => Int -> TTerm -> m TTerm
 optimize' 0 t = return t
