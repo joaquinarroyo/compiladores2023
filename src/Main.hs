@@ -32,7 +32,7 @@ import Lang
 import Parse ( P, tm, program, declOrTm, runP )
 import Elab ( elab, elabSDecl, elabSynTy, elabDecl )
 import Eval ( eval )
-import PPrint ( pp , ppTy )
+import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import System.CPUTime ( getCPUTime )
@@ -134,7 +134,8 @@ compileFile f = do
   m <- getMode
   printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
   decls <- loadFile f
-  decls' <- mapM handleDecl decls
+  decls' <- mapM (`handleDecl` False) decls
+  -- aca podria hacerse deadCodeElimination
   case m of
     Bytecompile -> do
       bytecode <- bytecompile decls'
@@ -157,8 +158,9 @@ parseIO filename p x =
     Right r -> return r
 
 -- | Maneja una declaración superficial
-handleDecl ::  MonadFD4 m => SDecl -> m (Decl TTerm)
-handleDecl sdecl = do
+-- Ver de usar bandera para no evaluar terminos al cargar archivos
+handleDecl ::  MonadFD4 m => SDecl -> Bool -> m (Decl TTerm)
+handleDecl sdecl b = do
   m <- getMode
   mdecl <- elabSDecl sdecl
   let decl = elabDecl (fromJust mdecl)
@@ -176,13 +178,17 @@ handleDecl sdecl = do
   where
     evalAddDecl :: MonadFD4 m => (TTerm -> m TTerm) -> Decl Term -> m (Decl TTerm)
     evalAddDecl f d = do
-      tdecl <- tcDecl d 
-      tt <- f (declBody tdecl)
+      tdecl <- tcDecl d
       opt <- getOpt
-      ott <- if opt then optimize tt else return tt -- optimizacion
-      let otdecl = tdecl {declBody = ott}
-      addDecl otdecl
-      return otdecl
+      s1 <- ppDecl tdecl
+      printFD4 s1
+      otdecl <- if opt then optimize tdecl else return tdecl -- optimizacion
+      s2 <- ppDecl otdecl
+      printFD4 s2
+      tt <- if b then f (declBody otdecl) else return $ declBody otdecl
+      let otdecl' = otdecl {declBody = tt}
+      addDecl otdecl'
+      return otdecl'
 
 data Command = Compile CompileForm
              | PPrint String
@@ -265,7 +271,7 @@ compilePhrase :: MonadFD4 m => String -> m ()
 compilePhrase x = do
   dot <- parseIO "<interactive>" declOrTm x
   case dot of
-    Left d  -> void $ handleDecl d
+    Left d  -> void $ handleDecl d True
     Right t -> handleTerm t
 
 -- | Evalua un término superficial

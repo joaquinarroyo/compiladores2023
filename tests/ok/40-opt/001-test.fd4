@@ -1,0 +1,7 @@
+let x : Nat = 2 + 3
+let y : Nat = x + 5
+# let f (g : Nat -> Nat)(y : Nat) : Nat = g y
+let suma1 (x : Nat) : Nat = x + 1
+# let ret : Nat = f suma1 x
+let f (g : Nat -> Nat) : Nat = g 1
+let ret : Nat = f suma1

@@ -15,7 +15,8 @@ module PPrint (
     pp,
     ppTy,
     ppName,
-    ppDecl
+    ppDecl,
+    freshen
     ) where
 
 import Lang

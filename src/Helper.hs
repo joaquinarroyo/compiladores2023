@@ -4,6 +4,7 @@ module Helper where
 import Lang
 import Common
 import MonadFD4
+import Subst (open, open2)
 
 -- | Transforma bindings a tipos
 bindingToType :: [(Name, Ty)] -> Ty -> Ty
@@ -32,3 +33,60 @@ checkSins p ((v, vty):vs) = do
   vty' <- checkSin p vty
   vs' <- checkSins p vs
   return $ (v, vty') : vs'
+
+-- | Chequea si un termino tiene efectos secundarios
+hasEffects :: TTerm -> Bool
+hasEffects (V _ _) = False
+hasEffects (Const _ _) = False
+hasEffects (Lam _ n _ scope) = hasEffects (open n scope)
+hasEffects (App _ t1 t2) =
+  let
+    b1 = hasEffects t1
+    b2 = hasEffects t2
+  in b1 || b2
+hasEffects (Print {}) = True
+hasEffects (BinaryOp i op t1 t2) =
+  let
+    b1 = hasEffects t1
+    b2 = hasEffects t2
+  in b1 || b2
+hasEffects (Fix _ n1 _ n2 _ scope) = hasEffects (open2 n1 n2 scope)
+hasEffects (IfZ i t1 t2 t3) =
+  let
+    b1 = hasEffects t1
+    b2 = hasEffects t2
+    b3 = hasEffects t3
+  in b1 || b2 || b3
+hasEffects (Let i n ty t1 scope) =
+  let
+    b1 = hasEffects t1
+    b2 = hasEffects (open n scope)
+  in
+    b1 || b2
+
+-- |
+getUsedVarsNames :: TTerm -> [Name]
+getUsedVarsNames (V _ (Free n)) = [n]
+getUsedVarsNames (V _ (Global n)) = [n]
+getUsedVarsNames (V _ _) = []
+getUsedVarsNames (Const _ _) = []
+getUsedVarsNames (App _ t1 t2) =
+  let
+    (n1, n2) = (getUsedVarsNames t1, getUsedVarsNames t2)
+  in n1 ++ n2
+getUsedVarsNames (Print _ _ t) = getUsedVarsNames t
+getUsedVarsNames (BinaryOp _ _ t1 t2) =
+  let
+    (n1, n2) = (getUsedVarsNames t1, getUsedVarsNames t2)
+  in n1 ++ n2
+getUsedVarsNames (Fix _ n1 _ n2 _ scope) = getUsedVarsNames (open2 n1 n2 scope)
+getUsedVarsNames (IfZ _ t1 t2 t3) =
+  let
+    (n1, n2, n3) = (getUsedVarsNames t1, getUsedVarsNames t2, getUsedVarsNames t3)
+  in n1 ++ n2 ++ n3
+getUsedVarsNames (Let i n ty t scope) =
+  let
+    (n1, n2) = (getUsedVarsNames t, getUsedVarsNames (open n scope))
+  in n1 ++ n2
+  
+    
