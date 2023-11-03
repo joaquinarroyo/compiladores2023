@@ -3,7 +3,9 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 
-module Bytecompile8 where
+module Bytecompile8 
+  ( showOps8, string2bc8, bc2string8, bcWrite8, bcRead8, bc8, bytecompile8, runBC8 )
+  where
 
 {- Module 8ByteCompile -}
 
@@ -13,12 +15,9 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word8, Binary(put, get), decode, encode )
 import Data.Binary.Put ( putWord8 )
 import Data.Binary.Get ( getWord8, isEmpty )
-import Data.List ( intercalate )
 import Data.Char
-import Subst
+import Bytecompile ( showOps, Bytecode, Module, openModule, ValBytecode(..), Env, Stack )
 
-type Opcode = Int
-type Bytecode = [Int]
 
 newtype Bytecode8 = BC8 { un8 :: [Word8] }
 
@@ -51,19 +50,26 @@ pattern DROP     = 12
 pattern PRINT    = 13
 pattern PRINTN   = 14
 pattern JUMP     = 15
--- | Nuevos patterns para IFZ
 pattern CJUMP    = 16
 pattern TAILCALL = 17
 -- | Nuevos patterns para Enteros
-pattern SHORT    = 18  -- 8bytes
+pattern SHORT    = 18 -- 8bytes
 pattern INT      = 19 -- 16bytes
 pattern LONG     = 20 -- 32bytes
-pattern LONGLONG = 21 -- 64bytes
 
 
 -- función util para debugging: muestra el Bytecode de forma más legible.
 showOps8 :: Bytecode -> [String]
-showOps8 [] = []
+showOps8 []         = []
+showOps8 (SHORT:xs) =
+  let (n, xs') = getNumber (SHORT:xs)
+  in show n : showOps8 xs'
+showOps8 (INT:xs)   = 
+  let (n, xs') = getNumber (INT:xs)
+  in show n : showOps8 xs'
+showOps8 (LONG:xs)  =
+  let (n, xs') = getNumber (LONG:xs)
+  in show n : showOps8 xs'
 showOps8 (NULL:xs)        = "NULL" : showOps8 xs
 showOps8 (RETURN:xs)      = "RETURN" : showOps8 xs
 showOps8 (ACCESS:i:xs)    = ("ACCESS " ++ show i) : showOps8 xs
@@ -84,9 +90,6 @@ showOps8 (CJUMP:i:xs)     = ("CJUMP off=" ++ show i) : showOps8 xs
 showOps8 (TAILCALL:xs)    = "TAILCALL" : showOps8 xs
 showOps8 (x:xs)           = show x : showOps8 xs
 
-showBC8 :: Bytecode -> String
-showBC8 = intercalate "; " . showOps8
-
 -- ord/chr devuelven los codepoints unicode, o en otras palabras
 -- la codificación UTF-8 del caracter.
 string2bc8 :: String -> Bytecode
@@ -104,8 +107,8 @@ bcWrite8 bs filename = BS.writeFile filename (encode $ BC8 $ fromIntegral <$> bs
 ---------------------------
 
 -- | Lee de un archivo y lo decodifica a bytecode
-bc8Read :: FilePath -> IO Bytecode
-bc8Read filename = (map fromIntegral <$> un8) . decode <$> BS.readFile filename
+bcRead8 :: FilePath -> IO Bytecode
+bcRead8 filename = (map fromIntegral <$> un8) . decode <$> BS.readFile filename
 
 -- | Transforma un Term en Bytecode
 bc8 :: MonadFD4 m => TTerm -> m Bytecode
@@ -117,7 +120,7 @@ bc8' :: MonadFD4 m => TTerm -> m Bytecode
 bc8' term = case term of
   (V _ (Bound i))                 -> return [ACCESS, i]
   (V _ (Free n))                  -> failFD4 "bc: Free"
-  -- (Const _ (CNat i))              -> return [CONST, i]
+  (Const _ (CNat i))              -> return (number2Bytecode i)
   (Lam _ _ _ (Sc1 t))             -> do
     t' <- tc8 t
     return $ [FUNCTION, length t'] ++ t'
@@ -169,76 +172,71 @@ tc8 term = case term of
     term' <- bc8' term
     return $ term' ++ [RETURN]
 
--- | Bytecode Vals
--- data ValBytecode =
---     I Int
---   | Fun Env Bytecode
---   | RA Env Bytecode
+-- | Ejecuta un bytecode
+runBC8 :: MonadFD4 m => Bytecode -> m ()
+runBC8 b = runBC8' b [] []
 
--- instance Show ValBytecode where
---   show (I i) = show i
---   show (Fun e b) = "Clos" ++ show (showOps b)
---   show (RA e b) = "RA" ++ show (showOps b)
+runBC8' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
+runBC8' (RETURN:_) _ (v:(RA e c):stack)        = runBC8' c e (v:stack)
+runBC8' (SHORT:xs) env stack                   = 
+  let (i, xs') = getNumber (SHORT:xs)
+  in runBC8' xs' env (I i:stack)
+runBC8' (INT:xs) env stack                     = 
+  let (i, xs') = getNumber (INT:xs)
+  in runBC8' xs' env (I i:stack)
+runBC8' (LONG:xs) env stack                    = 
+  let (i, xs') = getNumber (LONG:xs)
+  in runBC8' xs' env (I i:stack)
+runBC8' (ACCESS:i:xs) env stack                = runBC8' xs env (env!!i:stack)
+runBC8' (FUNCTION:i:xs) env stack              =
+  let drop' = drop i xs
+      take' = take i xs
+  in runBC8' drop' env (Fun env take':stack)
+runBC8' (CALL:xs) env (v:(Fun ef cf):stack)    = runBC8' cf (v:ef) (RA env xs:stack)
+runBC8' (ADD:xs) env ((I i1):(I i2):stack)     = runBC8' xs env (I (i1 + i2):stack)
+runBC8' (SUB:xs) env ((I i1):(I i2):stack)     = runBC8' xs env (I (max 0 (i2 - i1)):stack)
+runBC8' (FIX:xs) env ((Fun ef cf):stack)       =
+  let envFix = Fun envFix cf:env
+  in runBC8' xs env (Fun envFix cf:stack)
+runBC8' (STOP:xs) env (v:stack)                = return ()
+runBC8' (JUMP:i:xs) env stack                  = runBC8' (drop i xs) env stack
+runBC8' (SHIFT:xs) env (v:stack)               = runBC8' xs (v:env) stack
+runBC8' (DROP:xs) (v:env) stack                = runBC8' xs env stack
+runBC8' (PRINT:xs) env stack                   =
+  let (msg, _:xs') = span (/=NULL) xs
+      s = bc2string8 msg
+  in do printFD4nobreak s
+        runBC8' xs' env stack
+runBC8' (PRINTN:xs) env s@(I i:stack)          =
+  do printFD4 (show i)
+     runBC8' xs env s
+runBC8' (CJUMP:i:xs) env ((I c):stack)         =
+  case c of
+    0 -> runBC8' xs env stack
+    _ -> runBC8' (drop i xs) env stack
+runBC8' (TAILCALL:xs) env (v:(Fun ef cf):stack) =
+  runBC8' cf (v:ef) stack
 
--- type Env = [ValBytecode]
--- type Stack = [ValBytecode]
-
--- -- | Ejecuta un bytecode
--- runBC :: MonadFD4 m => Bytecode -> m ()
--- runBC b = runBC' b [] []
-
--- runBC' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
--- runBC' (RETURN:_) _ (v:(RA e c):stack)      = runBC' c e (v:stack)
--- runBC' (CONST:i:xs) env stack               = runBC' xs env (I i:stack)
--- runBC' (ACCESS:i:xs) env stack              = runBC' xs env (env!!i:stack)
--- runBC' (FUNCTION:i:xs) env stack            =
---   let drop' = drop i xs
---       take' = take i xs
---   in runBC' drop' env (Fun env take':stack)
--- runBC' (CALL:xs) env (v:(Fun ef cf):stack)  = runBC' cf (v:ef) (RA env xs:stack)
--- runBC' (ADD:xs) env ((I i1):(I i2):stack)   = runBC' xs env (I (i1 + i2):stack)
--- runBC' (SUB:xs) env ((I i1):(I i2):stack)   = runBC' xs env (I (max 0 (i2 - i1)):stack)
--- runBC' (FIX:xs) env ((Fun ef cf):stack)     =
---   let envFix = Fun envFix cf:env
---   in runBC' xs env (Fun envFix cf:stack)
--- runBC' (STOP:xs) env (v:stack)              = return ()
--- runBC' (JUMP:i:xs) env stack                = runBC' (drop i xs) env stack
--- runBC' (SHIFT:xs) env (v:stack)             = runBC' xs (v:env) stack
--- runBC' (DROP:xs) (v:env) stack              = runBC' xs env stack
--- runBC' (PRINT:xs) env stack                 =
---   let (msg, _:xs') = span (/=NULL) xs
---       s = bc2string msg
---   in do printFD4nobreak s
---         runBC' xs' env stack
--- runBC' (PRINTN:xs) env s@(I i:stack)        =
---   do printFD4 (show i)
---      runBC' xs env s
--- runBC' (CJUMP:i:xs) env ((I c):stack)       =
---   case c of
---     0 -> runBC' xs env stack
---     _ -> runBC' (drop i xs) env stack
--- runBC' (TAILCALL:xs) env (v:(Fun ef cf):stack) =
---   runBC' cf (v:ef) stack
-
--- -- caso de fallo
--- runBC' i env stack = do
---   printFD4 $ show (showOps i)
---   printFD4 $ show env
---   printFD4 $ show stack
---   failFD4 "runBC': non-exhaustive patterns"
-
--- | Modulo
-type Module = [Decl TTerm]
+-- caso de fallo
+runBC8' i env stack = do
+  printFD4 $ show (showOps i)
+  printFD4 $ show env
+  printFD4 $ show stack
+  failFD4 "runBC': non-exhaustive patterns"
 
 -- | Bytecompile
-byte8compile :: MonadFD4 m => Module -> m Bytecode
-byte8compile m = bc8 $ openModule m
+bytecompile8 :: MonadFD4 m => Module -> m Bytecode
+bytecompile8 m = bc8 $ openModule m
 
--- | Traduce una lista de declaraciones en una unica expresion "let in"
-openModule :: Module -> TTerm
-openModule [Decl _ n _ t]      = global2free n t
-openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty t (close n (global2free n (openModule xs))) -- ver si hace falta hacer global2free sobre 't'
+-- |
+getNumber :: Bytecode -> (Int, Bytecode)
+getNumber (SHORT:xs)            = (head xs, tail xs)
+getNumber (INT:x1:x2:xs)        = (x1 + x2 * 256, xs)
+getNumber (LONG:x1:x2:x3:x4:xs) = (x1 + x2 * 256 + x3 * 256^2 + x4 * 256^3, xs)
 
--- | Cambia las variables globales por variables libres
-global2free :: Name -> TTerm -> TTerm
-global2free name = varChangerGlobal (\v p n -> if n == name then V p (Free n) else V p (Global n))
+-- |
+number2Bytecode :: Int -> Bytecode
+number2Bytecode n
+  | n < 256   = [SHORT, fromIntegral n]
+  | n < 65536 = [INT, fromIntegral n, fromIntegral (n `div` 256)]
+  | otherwise = [LONG, fromIntegral n, fromIntegral (n `div` 256), fromIntegral (n `div` 256^2), fromIntegral (n `div` 256^3)]

@@ -39,7 +39,7 @@ import System.CPUTime ( getCPUTime )
 
 import CEK ( seek )
 import Bytecompile ( bcWrite, bcRead, runBC, bytecompile )
-import Bytecompile8 ( bcWrite8 )
+import Bytecompile8 ( bcWrite8, bcRead8, runBC8, bytecompile8, showOps8 )
 import Optimizer ( optimize )
 
 
@@ -146,7 +146,9 @@ compileFile f = do
       liftIO $ bcWrite bytecode bcfout
       printFD4 ("Compilacion exitosa a " ++ bcfout)
     Bytecompile8 -> do
-      liftIO $ bcWrite8 [] bc8fout 
+      bytecode8 <- bytecompile8 decls'
+      liftIO $ bcWrite8 bytecode8 bc8fout 
+      printFD4 $ show (showOps8 bytecode8)
       printFD4 ("Compilacion exitosa a " ++ bc8fout) -- TODO: completar
     CC -> return ()
     Typecheck -> printFD4 "Typecheck exitoso"
@@ -329,4 +331,9 @@ runVM f = do
 
 -- | Ejecuta un archivo bytecode8
 runVM8 :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
-runVM8 f = return () -- TODO: completar
+runVM8 f = do
+  b <- liftIO $ bcRead8 f
+  t1 <- liftIO getCPUTime
+  runBC8 b
+  t2 <- liftIO getCPUTime
+  printFD4 $ "Tiempo de ejecución de Bytecode8: " ++ show (fromIntegral (t2-t1) / (10^12)) ++ " segundos"

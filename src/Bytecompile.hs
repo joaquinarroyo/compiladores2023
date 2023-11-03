@@ -15,7 +15,7 @@
   una implementación de la Macchina para ejecutar el bytecode.
 -}
 module Bytecompile
-  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps, bytecompile )
+  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps, bytecompile, Module, openModule, ValBytecode(..), Env, Stack )
  where
 
 import Lang
@@ -28,7 +28,6 @@ import Data.List ( intercalate )
 import Data.Char
 import Subst
 
-type Opcode = Int
 type Bytecode = [Int]
 
 newtype Bytecode32 = BC { un32 :: [Word32] }
