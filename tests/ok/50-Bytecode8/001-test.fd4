@@ -1,2 +1,2 @@
-let x : Nat = 1231222
+let x : Nat = 46000
 let ret : Nat = print "x=" x

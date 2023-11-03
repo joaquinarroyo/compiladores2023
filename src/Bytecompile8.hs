@@ -63,13 +63,13 @@ showOps8 :: Bytecode -> [String]
 showOps8 []         = []
 showOps8 (SHORT:xs) =
   let (n, xs') = getNumber (SHORT:xs)
-  in show n : showOps8 xs'
+  in ("SHORT " ++ show n) : showOps8 xs'
 showOps8 (INT:xs)   = 
   let (n, xs') = getNumber (INT:xs)
-  in show n : showOps8 xs'
+  in ("INT " ++ show n) : showOps8 xs'
 showOps8 (LONG:xs)  =
   let (n, xs') = getNumber (LONG:xs)
-  in show n : showOps8 xs'
+  in ("LONG " ++ show n) : showOps8 xs'
 showOps8 (NULL:xs)        = "NULL" : showOps8 xs
 showOps8 (RETURN:xs)      = "RETURN" : showOps8 xs
 showOps8 (ACCESS:i:xs)    = ("ACCESS " ++ show i) : showOps8 xs
@@ -231,12 +231,14 @@ bytecompile8 m = bc8 $ openModule m
 -- |
 getNumber :: Bytecode -> (Int, Bytecode)
 getNumber (SHORT:xs)            = (head xs, tail xs)
-getNumber (INT:x1:x2:xs)        = (x1 + x2 * 256, xs)
-getNumber (LONG:x1:x2:x3:x4:xs) = (x1 + x2 * 256 + x3 * 256^2 + x4 * 256^3, xs)
+getNumber (INT:x1:x2:xs)        = (x1 + x2 * 64, xs)
+getNumber (LONG:x1:x2:x3:x4:xs) = (x1 + x2 * 64 + x3 * 64^2 + x4 * 64^4, xs)
 
--- |
+-- | SHORT 8bytes
+--   INT   16bytes
+--   LONG  32bytes
 number2Bytecode :: Int -> Bytecode
-number2Bytecode n
-  | n < 256   = [SHORT, fromIntegral n]
-  | n < 65536 = [INT, fromIntegral n, fromIntegral (n `div` 256)]
-  | otherwise = [LONG, fromIntegral n, fromIntegral (n `div` 256), fromIntegral (n `div` 256^2), fromIntegral (n `div` 256^3)]
+number2Bytecode n 
+  | n < 64   = [SHORT, fromIntegral n]
+  | n < 64^2 = [INT, fromIntegral (n `mod` 64), fromIntegral (n `div` 64)]
+  | n < 64^4 = [LONG, fromIntegral (n `mod` 64), fromIntegral (n `div` 64 `mod` 64), fromIntegral (n `div` 64^2 `mod` 64), fromIntegral (n `div` 64^3)]
