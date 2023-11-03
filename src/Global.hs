@@ -21,7 +21,9 @@ data Mode =
   | InteractiveCEK
   | CEK
   | Bytecompile
+  | Bytecompile8
   | RunVM
+  | RunVM8
   | CC
   -- | Canon
   -- | Assembler

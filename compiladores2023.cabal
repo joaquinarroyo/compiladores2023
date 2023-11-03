@@ -40,7 +40,7 @@ executable compiladores2023
         Helper
         CEK
         Bytecompile
-        Byte8compile
+        Bytecompile8
         Optimizer
 
     ghc-options: 

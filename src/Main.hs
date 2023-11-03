@@ -39,6 +39,7 @@ import System.CPUTime ( getCPUTime )
 
 import CEK ( seek )
 import Bytecompile ( bcWrite, bcRead, runBC, bytecompile )
+import Bytecompile8 ( bcWrite8 )
 import Optimizer ( optimize )
 
 
@@ -52,7 +53,9 @@ parseMode = (,,) <$>
   <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
   <|> flag' CEK (long "cek" <> short 'c' <> help "Ejecutar en la CEK")
   <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
+  <|> flag' Bytecompile8 (long "bytecompile8" <> short 'n' <> help "Compilar a la BVM8")
   <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
+  <|> flag' RunVM8 (long "runVM8" <> short 'r' <> help "Ejecutar bytecode8 en la BVM")
   <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
   <|> flag Eval Eval (long "eval" <> short 'e' <> help "Evaluar programa")
   <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
@@ -79,6 +82,7 @@ main = execParser opts >>= go
     go (Interactive, opt, pro, files) = runOrFail (Conf opt pro Interactive) (runInputT defaultSettings (repl files))
     go (InteractiveCEK, opt, pro, files) = runOrFail (Conf opt pro InteractiveCEK) (runInputT defaultSettings (repl files))
     go (RunVM, opt, pro, files) = runOrFail (Conf opt pro RunVM) $ mapM_ runVM files
+    go (RunVM8, opt, pro, files) = runOrFail (Conf opt pro RunVM8) $ mapM_ runVM8 files
     go (m, opt, pro, files) = runOrFail (Conf opt pro m) $ mapM_ compileFile files
 
 runOrFail :: Conf -> FD4 a -> IO a
@@ -141,6 +145,9 @@ compileFile f = do
       bytecode <- bytecompile decls'
       liftIO $ bcWrite bytecode bcfout
       printFD4 ("Compilacion exitosa a " ++ bcfout)
+    Bytecompile8 -> do
+      liftIO $ bcWrite8 [] bc8fout 
+      printFD4 ("Compilacion exitosa a " ++ bc8fout) -- TODO: completar
     CC -> return ()
     Typecheck -> printFD4 "Typecheck exitoso"
     _ -> return ()
@@ -148,6 +155,7 @@ compileFile f = do
   where
     splitF = head $ splitOn "." f
     bcfout = splitF ++ ".bc"
+    bc8fout = splitF ++ ".bc8"
     cfout = splitF ++ ".c"
 
 -- | Parsea un archivo
@@ -170,6 +178,7 @@ handleDecl sdecl b = do
     InteractiveCEK -> evalAddDecl seek decl
     CEK -> evalAddDecl seek decl
     Bytecompile -> evalAddDecl return decl
+    Bytecompile8 -> evalAddDecl return decl
     CC -> evalAddDecl return decl
     Typecheck -> do
       decl' <- tcDecl decl
@@ -180,11 +189,7 @@ handleDecl sdecl b = do
     evalAddDecl f d = do
       tdecl <- tcDecl d
       opt <- getOpt
-      s1 <- ppDecl tdecl
-      printFD4 s1
       otdecl <- if opt then optimize tdecl else return tdecl -- optimizacion
-      s2 <- ppDecl otdecl
-      printFD4 s2
       tt <- if b then f (declBody otdecl) else return $ declBody otdecl
       let otdecl' = otdecl {declBody = tt}
       addDecl otdecl'
@@ -321,3 +326,7 @@ runVM f = do
   runBC b
   t2 <- liftIO getCPUTime
   printFD4 $ "Tiempo de ejecución de Bytecode: " ++ show (fromIntegral (t2-t1) / (10^12)) ++ " segundos"
+
+-- | Ejecuta un archivo bytecode8
+runVM8 :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
+runVM8 f = return () -- TODO: completar

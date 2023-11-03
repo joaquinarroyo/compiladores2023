@@ -1,3 +1,6 @@
 *.hi
 *.o
 dist-newstyle/*
+*.bc
+*.bc8
+*.out
