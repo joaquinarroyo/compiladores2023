@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module Optimizer where
-import MonadFD4 ( MonadFD4, lookupDecl, failFD4, printFD4 )
-import Lang ( Tm(..), TTerm, Decl (declBody), Const (..), BinaryOp (..), Var (..), Name, getTy, Scope (Sc1), Scope2 (Sc2) )
+import MonadFD4 ( MonadFD4, lookupDecl, failFD4 )
+import Lang ( Tm(..), TTerm, Decl (declBody, Decl), Const (..), BinaryOp (..), Var (..), Name, getTy, Scope (Sc1), Scope2 (Sc2) )
 import Subst ( close, close2, open, open2 )
 import Eval (semOp, eval)
 import PPrint (ppName, freshen)
@@ -109,48 +109,89 @@ constantPropagation env (Let i n ty t scope) = do
 
 -- | Inline Expansion
 inlineExpansion :: MonadFD4 m => TTerm -> m TTerm
-inlineExpansion t = inlineExpansion' (getUsedVarsNames t) t
+inlineExpansion t = inlineExpansion' (getUsedVarsNames t) [] t
 
-inlineExpansion' :: MonadFD4 m => [Name] -> TTerm -> m TTerm
-inlineExpansion' _ v@(V _ _) = return v
-inlineExpansion' _ c@(Const _ _) = return c
-inlineExpansion' nms (Lam i n ty (Sc1 t)) = do
-  t' <- inlineExpansion' nms t
+inlineExpansion' :: MonadFD4 m => [Name] -> [(Name, TTerm)] -> TTerm -> m TTerm
+inlineExpansion' _ _ v@(V _ _) = return v
+inlineExpansion' _ _ c@(Const _ _) = return c
+inlineExpansion' nms env (Lam i n ty (Sc1 t)) = do
+  t' <- inlineExpansion' nms env t
   return $ Lam i n ty (Sc1 t')
-inlineExpansion' nms (Print i s t) = do
-  t' <- inlineExpansion' nms t
+inlineExpansion' nms env (Print i s t) = do
+  t' <- inlineExpansion' nms env t
   return $ Print i s t'
-inlineExpansion' nms (BinaryOp i op t1 t2) = do
-  t1' <- inlineExpansion' nms t1
-  t2' <- inlineExpansion' nms t2
+inlineExpansion' nms env (BinaryOp i op t1 t2) = do
+  t1' <- inlineExpansion' nms env t1
+  t2' <- inlineExpansion' nms env t2
   return $ BinaryOp i op t1' t2'
-inlineExpansion' nms (Fix i n1 ty1 n2 ty2 (Sc2 t)) = do
-  t' <- inlineExpansion' nms t
+inlineExpansion' nms env (Fix i n1 ty1 n2 ty2 (Sc2 t)) = do
+  t' <- inlineExpansion' nms env t
   return $ Fix i n1 ty1 n2 ty2 (Sc2 t')
-inlineExpansion' nms (IfZ i t1 t2 t3) = do
-  t1' <- inlineExpansion' nms t1
-  t2' <- inlineExpansion' nms t2
-  t3' <- inlineExpansion' nms t3
+inlineExpansion' nms env (IfZ i t1 t2 t3) = do
+  t1' <- inlineExpansion' nms env t1
+  t2' <- inlineExpansion' nms env t2
+  t3' <- inlineExpansion' nms env t3
   return $ IfZ i t1' t2' t3'
-inlineExpansion' nms (Let i n ty t1 (Sc1 t2)) = do
-  t1' <- inlineExpansion' nms t1
-  t2' <- inlineExpansion' nms t2
+inlineExpansion' nms env (Let i n ty t1 (Sc1 t2)) = do
+  t1' <- inlineExpansion' nms env t1
+  t2' <- inlineExpansion' nms ((n ,t1'):env) t2
   return $ Let i n ty t1' (Sc1 t2')
-inlineExpansion' nms t@(App _ (Lam {}) (Const {})) = eval t
+inlineExpansion' nms env t@(App _ (Lam {}) (Const {})) = eval t
 -- Se asume que la variable es siempre funcion
-inlineExpansion' nms t@(App _ (V _ (Bound i)) (Const {})) = return t
-inlineExpansion' nms t@(App _ (V {}) (Const {})) = eval t
+inlineExpansion' nms env t@(App _ (V _ (Bound i)) (Const {})) = return t
+inlineExpansion' nms env t@(App _ (V {}) (Const {})) = eval t
 -- Caso Aplicacion con t' complejo
--- Falta caso (Free f) (Llevar entorno local?)
-inlineExpansion' nms (App i (V _ (Global f)) t') = do
+inlineExpansion' nms env (App i (V _ (Free n)) t') = do
+  case lookup n env of
+    Nothing -> failFD4 $ "Error en optimizacion (IE): variable libre no declarada: " ++ ppName n
+    Just t -> inlineExpansion' nms env (App i t t')
+inlineExpansion' nms env (App i (V _ (Global f)) t') = do
   mtm <- lookupDecl f
   case mtm of
     Nothing -> failFD4 $ "Error en optimizacion (IE): variable no declarada: " ++ ppName f
-    Just t -> inlineExpansion' nms (App i t t')
-inlineExpansion' nms t@(App i (Lam _ _ _ scope) t') = 
+    Just t -> inlineExpansion' nms env (App i t t')
+inlineExpansion' nms env t@(App i (Lam _ _ _ scope) t') =
   let z = freshen nms "x"
   in return $ Let i z (getTy t') t' (Sc1 (open z scope))
-inlineExpansion' nms (App i t1 t2) = do
-  t1' <- inlineExpansion' nms t1
-  t2' <- inlineExpansion' nms t2
+inlineExpansion' nms env (App i t1 t2) = do
+  t1' <- inlineExpansion' nms env t1
+  t2' <- inlineExpansion' nms env t2
   return $ App i t1' t2'
+
+-- | Dead code elimination
+deadCodeElimination :: MonadFD4 m => [Decl TTerm] -> m [Decl TTerm]
+deadCodeElimination [] = return []
+deadCodeElimination ds = do
+  decls <- mapM (addReferences . declBody) ds
+  let decls' = filter (\d -> (hasEffects . declBody) d || (d `elem` concat decls)) ds
+  return decls'
+
+-- | Devuelve declaraciones referenciadas
+addReferences :: MonadFD4 m => TTerm -> m [Decl TTerm]
+addReferences (V (p, ty) (Global n)) = do
+  mtm <- lookupDecl n
+  case mtm of
+    Nothing -> failFD4 $ "Error en optimizacion (DCE): variable no declarada: " ++ ppName n
+    Just t -> return [Decl p n ty t]
+addReferences (Lam _ _ _ (Sc1 t)) = addReferences t
+addReferences (App _ t1 t2) = do
+  r1 <- addReferences t1
+  r2 <- addReferences t2
+  return $ r1 ++ r2
+addReferences (Print _ _ t) = addReferences t
+addReferences (BinaryOp _ _ t1 t2) = do
+  r1 <- addReferences t1
+  r2 <- addReferences t2
+  return $ r1 ++ r2
+addReferences (Fix _ _ _ _ _ (Sc2 t)) = addReferences t
+addReferences (IfZ _ t1 t2 t3) = do
+  r1 <- addReferences t1
+  r2 <- addReferences t2
+  r3 <- addReferences t3
+  return $ r1 ++ r2 ++ r3
+addReferences (Let _ _ _ t1 (Sc1 t2)) = do
+  r1 <- addReferences t1
+  r2 <- addReferences t2
+  return $ r1 ++ r2
+addReferences _ = return []
+

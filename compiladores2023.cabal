@@ -42,6 +42,8 @@ executable compiladores2023
         Bytecompile
         Bytecompile8
         Optimizer
+        C
+        IR
 
     ghc-options: 
         -threaded 

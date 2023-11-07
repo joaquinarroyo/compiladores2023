@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE EmptyDataDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 
 {-|
 Module      : Lang
@@ -74,6 +76,11 @@ data Decl a = Decl
   , declBody :: a
   }
   deriving (Show, Functor)
+
+instance Eq (Decl TTerm) where
+  (==) :: Decl TTerm -> Decl TTerm -> Bool
+  (==) d1 d2 = declName d1 == declName d2 
+  
 
 -- | tipo de datos de declaraciones superficiales y sinonimos de tipos
 data SDecl = 

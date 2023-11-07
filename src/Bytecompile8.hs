@@ -16,7 +16,7 @@ import Data.Binary ( Word8, Binary(put, get), decode, encode )
 import Data.Binary.Put ( putWord8 )
 import Data.Binary.Get ( getWord8, isEmpty )
 import Data.Char
-import Bytecompile ( showOps, Bytecode, Module, openModule, ValBytecode(..), Env, Stack )
+import Bytecompile ( showOps, Bytecode, Module, openModule, ValBytecode(..), Env, Stack, dropDrops )
 
 
 newtype Bytecode8 = BC8 { un8 :: [Word8] }
@@ -216,7 +216,6 @@ runBC8' (CJUMP:i:xs) env ((I c):stack)         =
     _ -> runBC8' (drop i xs) env stack
 runBC8' (TAILCALL:xs) env (v:(Fun ef cf):stack) =
   runBC8' cf (v:ef) stack
-
 -- caso de fallo
 runBC8' i env stack = do
   printFD4 $ show (showOps i)
@@ -226,19 +225,22 @@ runBC8' i env stack = do
 
 -- | Bytecompile
 bytecompile8 :: MonadFD4 m => Module -> m Bytecode
-bytecompile8 m = bc8 $ openModule m
+bytecompile8 m = do
+  bc <- bc8 $ openModule m
+  return $ dropDrops bc
 
 -- |
 getNumber :: Bytecode -> (Int, Bytecode)
 getNumber (SHORT:xs)            = (head xs, tail xs)
-getNumber (INT:x1:x2:xs)        = (x1 + x2 * 64, xs)
-getNumber (LONG:x1:x2:x3:x4:xs) = (x1 + x2 * 64 + x3 * 64^2 + x4 * 64^4, xs)
+getNumber (INT:x1:x2:xs)        = (x1 + x2 * 256, xs)
+getNumber (LONG:x1:x2:x3:x4:xs) = (x1 + x2 * 256 + x3 * 256^2 + x4 * 256^4, xs)
 
--- | SHORT 8bytes
---   INT   16bytes
---   LONG  32bytes
+-- | SHORT 8bits
+--   INT   16bits
+--   LONG  32bits
 number2Bytecode :: Int -> Bytecode
 number2Bytecode n 
-  | n < 64   = [SHORT, fromIntegral n]
-  | n < 64^2 = [INT, fromIntegral (n `mod` 64), fromIntegral (n `div` 64)]
-  | n < 64^4 = [LONG, fromIntegral (n `mod` 64), fromIntegral (n `div` 64 `mod` 64), fromIntegral (n `div` 64^2 `mod` 64), fromIntegral (n `div` 64^3)]
+  | n < 256   = [SHORT, fromIntegral n]
+  | n < 256^2 = [INT, fromIntegral (n `mod` 256), fromIntegral (n `div` 256)]
+  | n < 256^4 = [LONG, fromIntegral (n `mod` 256), fromIntegral (n `div` 256 `mod` 256), fromIntegral (n `div` 256^2 `mod` 256), fromIntegral (n `div` 256^3)]
+

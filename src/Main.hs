@@ -40,7 +40,8 @@ import System.CPUTime ( getCPUTime )
 import CEK ( seek )
 import Bytecompile ( bcWrite, bcRead, runBC, bytecompile )
 import Bytecompile8 ( bcWrite8, bcRead8, runBC8, bytecompile8, showOps8 )
-import Optimizer ( optimize )
+import Optimizer ( optimize, deadCodeElimination )
+import Data.Functor.Contravariant (Op(getOp))
 
 
 prompt :: String
@@ -139,17 +140,17 @@ compileFile f = do
   printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
   decls <- loadFile f
   decls' <- mapM (`handleDecl` False) decls
-  -- aca podria hacerse deadCodeElimination
+  opt <- getOpt
+  odecls' <- if opt then deadCodeElimination decls' else return decls'
   case m of
     Bytecompile -> do
-      bytecode <- bytecompile decls'
+      bytecode <- bytecompile odecls'
       liftIO $ bcWrite bytecode bcfout
       printFD4 ("Compilacion exitosa a " ++ bcfout)
     Bytecompile8 -> do
-      bytecode8 <- bytecompile8 decls'
-      liftIO $ bcWrite8 bytecode8 bc8fout 
-      printFD4 $ show (showOps8 bytecode8)
-      printFD4 ("Compilacion exitosa a " ++ bc8fout) -- TODO: completar
+      bytecode8 <- bytecompile8 odecls'
+      liftIO $ bcWrite8 bytecode8 bc8fout
+      printFD4 ("Compilacion exitosa a " ++ bc8fout)
     CC -> return ()
     Typecheck -> printFD4 "Typecheck exitoso"
     _ -> return ()

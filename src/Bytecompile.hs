@@ -15,7 +15,9 @@
   una implementación de la Macchina para ejecutar el bytecode.
 -}
 module Bytecompile
-  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps, bytecompile, Module, openModule, ValBytecode(..), Env, Stack )
+  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps, 
+    bytecompile, Module, openModule, ValBytecode(..), Env, Stack,
+    dropDrops )
  where
 
 import Lang
@@ -253,7 +255,9 @@ type Module = [Decl TTerm]
 
 -- | Bytecompile
 bytecompile :: MonadFD4 m => Module -> m Bytecode
-bytecompile m = bc $ openModule m
+bytecompile m = do
+  bc' <- bc $ openModule m
+  return $ dropDrops bc'
 
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
 openModule :: Module -> TTerm
@@ -263,3 +267,7 @@ openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty t (close n (global2free 
 -- | Cambia las variables globales por variables libres
 global2free :: Name -> TTerm -> TTerm
 global2free name = varChangerGlobal (\v p n -> if n == name then V p (Free n) else V p (Global n))
+
+-- |
+dropDrops :: Bytecode -> Bytecode
+dropDrops = id
