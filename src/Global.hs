@@ -44,7 +44,8 @@ data GlEnv = GlEnv {
   lfile :: String,      -- ^ Último archivo cargado.
   cantDecl :: Int,      -- ^ Cantidad de declaraciones desde la última carga
   glb :: [Decl TTerm],  -- ^ Entorno con declaraciones globales
-  tysin :: [SDecl]      -- ^ Entorno con declaraciones de sinonimos de tipos
+  tysin :: [SDecl],     -- ^ Entorno con declaraciones de sinonimos de tipos
+  profile :: Profile    -- ^ Profile
 }
 
 -- | Entorno de tipado de declaraciones globales
@@ -55,16 +56,36 @@ tyEnv g = map (\(Decl _ n ty b) -> (n, ty))  (glb g)
 tySinEnv :: GlEnv -> [(Name, Ty)]
 tySinEnv g = map (\(DirectTypeDecl _ n ty) -> (n, ty))  (tysin g)
 
-
 -- | Valor del estado inicial
 initialEnv :: GlEnv
-initialEnv = GlEnv False "" 0 [] []
+initialEnv = GlEnv False "" 0 [] [] NoneProfile
 
--- | Profile data
-data Profile = CEKProfile { cekSteps :: Int } | BytecodeProfile { bcOps :: Int, maxStackSize :: Int, totalClousures :: Int } | NoneProfile
-  deriving Show
+initialEnvWithProfile :: Mode -> GlEnv
+initialEnvWithProfile m = GlEnv False "" 0 [] [] (getProfile m)
+
+-- | Profile
+data Profile = CEKProfile { cekSteps :: Int } | BytecodeProfile { bcOps :: Int, maxStackSize :: Int, clousures :: Int } | NoneProfile
+
+instance Show Profile where
+  show (CEKProfile n) = "CEK PROFILE: steps = " ++ show n
+  show (BytecodeProfile n m k) = "Bytecode PROFILE: steps = " ++ show n ++ ", max stack size = " ++ show m ++ ", clousures = " ++ show k
+  show NoneProfile = ""
 
 getProfile :: Mode -> Profile
 getProfile CEK = CEKProfile 0
-getProfile Bytecompile = BytecodeProfile 0 0 0
+getProfile RunVM = BytecodeProfile 0 0 0
+getProfile RunVM8 = BytecodeProfile 0 0 0
 getProfile _ = NoneProfile
+
+tickProfile :: Profile -> Profile
+tickProfile (CEKProfile n) = CEKProfile (n + 1)
+tickProfile (BytecodeProfile n m k) = BytecodeProfile (n + 1) m k
+tickProfile NoneProfile = NoneProfile
+
+maxStackProfile :: Profile -> Int -> Profile
+maxStackProfile (BytecodeProfile n m k) m' = BytecodeProfile n (max m m') k
+maxStackProfile p _ = p
+
+addClousureProfile :: Profile -> Int -> Profile
+addClousureProfile (BytecodeProfile n m k) k' = BytecodeProfile n m (k + k')
+addClousureProfile p _ = p

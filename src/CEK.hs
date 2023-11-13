@@ -8,7 +8,7 @@ module CEK ( seek ) where
 
 import Common ( Pos )
 import Lang
-import MonadFD4 ( MonadFD4, failFD4, printFD4, lookupDecl, getPro )
+import MonadFD4 ( MonadFD4, failFD4, printFD4, lookupDecl, tick )
 import Eval ( semOp )
 
 -- | Tipo de dato para los valores
@@ -50,15 +50,8 @@ seek t  = do
 
 -- | Funcion seek de la maquina CEK
 seek' :: MonadFD4 m => TTerm -> Env -> [Frame] -> m (ValCEK Info Var)
-seek' term env kont = do
-  pro <- getPro
-  if pro
-    then do
-      -- modificamos el profile
-      seek''
-    else seek''
-  where
-    seek'' = case term of
+seek' term env kont = tick >>
+    case term of
       (Print _ s t) -> seek' t env (PrintFrame s:kont)
       (BinaryOp _ op t1 t2) -> seek' t1 env (RBinFrame env op t2:kont)
       (IfZ _ t1 t2 t3) -> seek' t1 env (IfZFrame env t2 t3:kont)
@@ -76,9 +69,7 @@ seek' term env kont = do
 
 -- 
 destroy :: MonadFD4 m => ValCEK Info Var -> [Frame] -> m (ValCEK Info Var)
-destroy v f = do
-  pro <- getPro
-  destroy' v f
+destroy v f = tick >> destroy' v f
 
 -- | Funcion destroy de la maquina CEK
 destroy' :: MonadFD4 m => ValCEK Info Var -> [Frame] -> m (ValCEK Info Var)

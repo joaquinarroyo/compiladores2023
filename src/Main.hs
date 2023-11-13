@@ -32,17 +32,15 @@ import Lang
 import Parse ( P, tm, program, declOrTm, runP )
 import Elab ( elab, elabSDecl, elabSynTy, elabDecl )
 import Eval ( eval )
-import PPrint ( pp , ppTy, ppDecl )
+import PPrint ( pp , ppTy )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import System.CPUTime ( getCPUTime )
 
 import CEK ( seek )
 import Bytecompile ( bcWrite, bcRead, runBC, bytecompile )
-import Bytecompile8 ( bcWrite8, bcRead8, runBC8, bytecompile8, showOps8 )
+import Bytecompile8 ( bcWrite8, bcRead8, runBC8, bytecompile8 )
 import Optimizer ( optimize, deadCodeElimination )
-import Data.Functor.Contravariant (Op(getOp))
-
 
 prompt :: String
 prompt = "FD4> "
@@ -139,7 +137,7 @@ compileFile f = do
   m <- getMode
   printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
   decls <- loadFile f
-  decls' <- mapM (`handleDecl` False) decls
+  decls' <- mapM handleDecl decls
   opt <- getOpt
   odecls' <- if opt then deadCodeElimination decls' else return decls'
   case m of
@@ -155,6 +153,7 @@ compileFile f = do
     Typecheck -> printFD4 "Typecheck exitoso"
     _ -> return ()
   setInter i
+  showProfile
   where
     splitF = head $ splitOn "." f
     bcfout = splitF ++ ".bc"
@@ -170,8 +169,8 @@ parseIO filename p x =
 
 -- | Maneja una declaración superficial
 -- Ver de usar bandera para no evaluar terminos al cargar archivos
-handleDecl ::  MonadFD4 m => SDecl -> Bool -> m (Decl TTerm)
-handleDecl sdecl b = do
+handleDecl ::  MonadFD4 m => SDecl -> m (Decl TTerm)
+handleDecl sdecl = do
   m <- getMode
   mdecl <- elabSDecl sdecl
   let decl = elabDecl (fromJust mdecl)
@@ -193,7 +192,7 @@ handleDecl sdecl b = do
       tdecl <- tcDecl d
       opt <- getOpt
       otdecl <- if opt then optimize tdecl else return tdecl -- optimizacion
-      tt <- if b then f (declBody otdecl) else return $ declBody otdecl
+      tt <-  f (declBody otdecl)
       let otdecl' = otdecl {declBody = tt}
       addDecl otdecl'
       return otdecl'
@@ -279,7 +278,7 @@ compilePhrase :: MonadFD4 m => String -> m ()
 compilePhrase x = do
   dot <- parseIO "<interactive>" declOrTm x
   case dot of
-    Left d  -> void $ handleDecl d True
+    Left d  -> void $ handleDecl d
     Right t -> handleTerm t
 
 -- | Evalua un término superficial
@@ -328,6 +327,7 @@ runVM f = do
   t1 <- liftIO getCPUTime
   runBC b
   t2 <- liftIO getCPUTime
+  showProfile
   printFD4 $ "Tiempo de ejecución de Bytecode: " ++ show (fromIntegral (t2-t1) / (10^12)) ++ " segundos"
 
 -- | Ejecuta un archivo bytecode8
@@ -337,4 +337,5 @@ runVM8 f = do
   t1 <- liftIO getCPUTime
   runBC8 b
   t2 <- liftIO getCPUTime
+  showProfile
   printFD4 $ "Tiempo de ejecución de Bytecode8: " ++ show (fromIntegral (t2-t1) / (10^12)) ++ " segundos"

@@ -38,7 +38,11 @@ module MonadFD4 (
   catchErrors,
   lookupSinTy,
   addSinTy,
-  getTySins, 
+  getTySins,
+  tick,
+  maxStack,
+  addClousure,
+  showProfile,
   MonadFD4,
   module Control.Monad.Except,
   module Control.Monad.State)
@@ -150,6 +154,22 @@ catchErrors c = catchError (Just <$> c)
                            (\e -> liftIO $ hPrint stderr e
                               >> return Nothing)
 
+tick :: MonadFD4 m => m ()
+tick = modify (\s -> s {profile = tickProfile (profile s)})
+
+maxStack :: MonadFD4 m => Int -> m ()
+maxStack n = modify (\s -> s {profile = maxStackProfile (profile s) n})
+
+addClousure :: MonadFD4 m => Int -> m ()
+addClousure n = modify (\s -> s {profile = addClousureProfile (profile s) n})
+
+showProfile :: MonadFD4 m => m ()
+showProfile = do
+  pro <- getPro
+  when pro $ do
+    s <- get
+    printFD4 $ show (profile s)
+
 ----
 -- Importante, no eta-expandir porque GHC no hace una
 -- eta-contracción de sinónimos de tipos
@@ -166,12 +186,11 @@ type FD4Profile = WriterT Profile (ReaderT Conf (StateT GlEnv (ExceptT Error IO)
 instance MonadFD4 FD4 where
   tickCEK = return ()
 
--- instance MonadFD4 FD4Profile where
---   tickCEK = modify (\s -> s { profile = cek profile + 1 })
-
 -- 'runFD4\'' corre una computación de la mónad 'FD4' en el estado inicial 'Global.initialEnv' 
 runFD4' :: FD4 a -> Conf -> IO (Either Error (a, GlEnv))
-runFD4' c conf = runExceptT $ runStateT (runReaderT c conf) initialEnv
+runFD4' c conf = runExceptT $ runStateT (runReaderT c conf) initEnv
+  where
+    initEnv = if pro conf then initialEnvWithProfile (mode conf) else initialEnv
 
 runFD4:: FD4 a -> Conf -> IO (Either Error a)
 runFD4 c conf = fmap fst <$> runFD4' c conf
