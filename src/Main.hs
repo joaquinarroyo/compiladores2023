@@ -32,7 +32,7 @@ import Lang
 import Parse ( P, tm, program, declOrTm, runP )
 import Elab ( elab, elabSDecl, elabSynTy, elabDecl )
 import Eval ( eval )
-import PPrint ( pp , ppTy )
+import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import System.CPUTime ( getCPUTime )
@@ -41,6 +41,8 @@ import CEK ( seek )
 import Bytecompile ( bcWrite, bcRead, runBC, bytecompile )
 import Bytecompile8 ( bcWrite8, bcRead8, runBC8, bytecompile8 )
 import Optimizer ( optimize, deadCodeElimination )
+import C
+import IR
 
 prompt :: String
 prompt = "FD4> "
@@ -50,11 +52,11 @@ parseMode :: Parser (Mode, Bool, Bool)
 parseMode = (,,) <$>
   (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
   <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
-  <|> flag' CEK (long "cek" <> short 'c' <> help "Ejecutar en la CEK")
+  <|> flag' CEK (long "cek" <> short 'e' <> help "Ejecutar en la CEK")
   <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
   <|> flag' Bytecompile8 (long "bytecompile8" <> short 'n' <> help "Compilar a la BVM8")
   <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
-  <|> flag' RunVM8 (long "runVM8" <> short 'r' <> help "Ejecutar bytecode8 en la BVM")
+  <|> flag' RunVM8 (long "runVM8" <> short '8' <> help "Ejecutar bytecode8 en la BVM")
   <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
   <|> flag Eval Eval (long "eval" <> short 'e' <> help "Evaluar programa")
   <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
@@ -149,7 +151,11 @@ compileFile f = do
       bytecode8 <- bytecompile8 odecls'
       liftIO $ bcWrite8 bytecode8 bc8fout
       printFD4 ("Compilacion exitosa a " ++ bc8fout)
-    CC -> return ()
+    CC -> do
+      let ccode = (ir2C . runCC) odecls'
+      printFD4 ccode
+      liftIO $ ccWrite ccode cfout
+      printFD4 ("Compilacion exitosa a " ++ cfout)
     Typecheck -> printFD4 "Typecheck exitoso"
     _ -> return ()
   setInter i

@@ -29,6 +29,7 @@ import Data.Binary.Get ( getWord32le, isEmpty )
 import Data.List ( intercalate )
 import Data.Char
 import Subst
+import PPrint ( pp )
 
 type Bytecode = [Int]
 
@@ -264,7 +265,7 @@ bytecompile m = do
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
 openModule :: Module -> TTerm
 openModule [Decl _ n _ t]      = global2free n t
-openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty t (close n (global2free n (openModule xs))) -- ver si hace falta hacer global2free sobre 't'
+openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty (global2free n t) (close n (global2free n (openModule xs))) -- ver si hace falta hacer global2free sobre 't'
 
 -- | Cambia las variables globales por variables libres
 global2free :: Name -> TTerm -> TTerm

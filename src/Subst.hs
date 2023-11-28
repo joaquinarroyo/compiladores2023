@@ -96,7 +96,7 @@ close2 nm1 nm2 t = Sc2 (varChanger lcl (\_ p i -> V p (Bound i)) t)
                       | otherwise = V p (Free y)
 
 --
-varChangerGlobal :: (Int -> info -> Name -> Tm info Var) --que hacemos con las variables localmente libres
+varChangerGlobal :: (Int -> info -> Name -> Tm info Var) -- que hacemos con las variables localmente libres
                     -> Tm info Var -> Tm info Var
 varChangerGlobal local t = go 0 t where
   go n   (V p (Bound i)) = V p (Bound i)

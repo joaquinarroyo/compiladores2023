@@ -1,0 +1,9 @@
+let z : (Nat -> Nat) =
+    let y : Nat = 4 in let f : (Nat -> Nat) = fun (x : Nat) -> x + y in f
+
+# let f0 (x : Nat) : Nat = x + y0
+# let f1 (y : Nat) : Nat = f0 [y]
+# let f2 (z : Nat) : Nat = f1 4
+
+
+

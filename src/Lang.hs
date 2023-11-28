@@ -170,3 +170,18 @@ freeVars tm = nubSort $ go tm [] where
   go (IfZ _ c t e             ) xs = go c $ go t $ go e xs
   go (Const _ _               ) xs = xs
   go (Let _ _ _ e (Sc1 t)     ) xs = go e (go t xs)
+
+-- | Obtiene los nombres y tipos de variables (abiertas o globales) de un término.
+freeVarsWithTy :: TTerm -> [(Name, Ty)]
+freeVarsWithTy tm = go tm [] where
+  go (V (pos, ty) (Free   v)  ) xs = (v, ty) : xs
+  go (V (pos, ty) (Global v)  ) xs = (v, ty) : xs
+  go (V _ _                   ) xs = xs
+  go (Lam _ _ _ (Sc1 t)       ) xs = go t xs
+  go (App   _ l r             ) xs = go l $ go r xs
+  go (Print _ _ t             ) xs = go t xs
+  go (BinaryOp _ _ t u        ) xs = go t $ go u xs
+  go (Fix _ _ _ _ _ (Sc2 t)   ) xs = go t xs
+  go (IfZ _ c t e             ) xs = go c $ go t $ go e xs
+  go (Const _ _               ) xs = xs
+  go (Let _ _ _ e (Sc1 t)     ) xs = go e (go t xs)

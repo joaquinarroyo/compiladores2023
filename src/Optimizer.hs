@@ -2,7 +2,7 @@
 module Optimizer where
 import MonadFD4 ( MonadFD4, lookupDecl, failFD4 )
 import Lang ( Tm(..), TTerm, Decl (declBody, Decl), Const (..), BinaryOp (..), Var (..), Name, getTy, Scope (Sc1), Scope2 (Sc2) )
-import Subst ( close, close2, open, open2 )
+import Subst ( close, close2, open, open2, subst )
 import Eval (semOp, eval)
 import PPrint (ppName, freshen)
 import Helper (hasEffects, getUsedVarsNames)
@@ -21,14 +21,11 @@ optimize' :: MonadFD4 m => Int -> TTerm -> m TTerm
 optimize' 0 t = return t
 optimize' i t = constantFolding t >>= constantPropagation [] >>= inlineExpansion >>= optimize' (i - 1)
 
--- CAMBIAR OPEN/CLOSE DE SCOPES CUANDO NO SEA NECEASRIO USARLOS
-
 -- | Constant Folding
 constantFolding :: MonadFD4 m => TTerm ->  m TTerm
 constantFolding v@(V _ _) = return v
 constantFolding c@(Const _ _) = return c
-constantFolding (Lam i n ty scope) = do
-    let t = open n scope
+constantFolding (Lam i n ty (Sc1 t)) = do
     t' <- constantFolding t
     return $ Lam i n ty (close n t')
 constantFolding (App i t1 t2) = do
@@ -38,8 +35,7 @@ constantFolding (App i t1 t2) = do
 constantFolding (Print i s t) = do
     t' <- constantFolding t
     return $ Print i s t'
-constantFolding (Fix i n1 ty1 n2 ty2 scope) = do
-    let t = open2 n1 n2 scope
+constantFolding (Fix i n1 ty1 n2 ty2 (Sc2 t)) = do
     t' <- constantFolding t
     return $ Fix i n1 ty1 n2 ty2 (close2 n1 n2 t')
 constantFolding (IfZ i t1 t2 t3) = do
@@ -47,9 +43,8 @@ constantFolding (IfZ i t1 t2 t3) = do
     t2' <- constantFolding t2
     t3' <- constantFolding t3
     return $ IfZ i t1' t2' t3'
-constantFolding (Let i n ty t1 scope) = do
+constantFolding (Let i n ty t1 (Sc1 t2)) = do
     t1' <- constantFolding t1
-    let t2 = open n scope
     t2' <- constantFolding t2
     return $ Let i n ty t1' (close n t2')
 constantFolding (BinaryOp i op (Const _ (CNat n1)) (Const _ (CNat n2))) =
@@ -75,8 +70,7 @@ constantPropagation env v@(V i (Free n)) =
     Just t -> return t
 constantPropagation _ v@(V i (Bound n)) = return v
 constantPropagation _ c@(Const _ _) = return c
-constantPropagation env (Lam i n ty scope) = do
-  let t = open n scope
+constantPropagation env (Lam i n ty (Sc1 t)) = do
   t' <- constantPropagation env t
   return $ Lam i n ty (close n t')
 constantPropagation env (App i t1 t2) = do
@@ -90,8 +84,7 @@ constantPropagation env (BinaryOp i op t1 t2) = do
   t1' <- constantPropagation env t1
   t2' <- constantPropagation env t2
   return $ BinaryOp i op t1' t2'
-constantPropagation env (Fix i n1 ty1 n2 ty2 scope) = do
-  let t = open2 n1 n2 scope
+constantPropagation env (Fix i n1 ty1 n2 ty2 (Sc2 t)) = do
   t' <- constantPropagation env t
   return $ Fix i n1 ty2 n2 ty2 (close2 n1 n2 t')
 constantPropagation env (IfZ i t1 t2 t3) = do
@@ -99,13 +92,13 @@ constantPropagation env (IfZ i t1 t2 t3) = do
   t2' <- constantPropagation env t2
   t3' <- constantPropagation env t3
   return $ IfZ i t1' t2' t3'
-constantPropagation env (Let i n ty t scope) = do
-  t' <- constantPropagation env t
-  case t' of
-    c@(Const _ v) -> constantPropagation ((n, c):env) (open n scope)
+constantPropagation env (Let i n ty t1 (Sc1 t2)) = do
+  t1' <- constantPropagation env t1
+  case t1' of
+    c@(Const _ v) -> constantPropagation ((n, c):env) t2
     _ -> do
-      scope' <- constantPropagation env (open n scope)
-      return $ Let i n ty t' (close n scope')
+      scope' <- constantPropagation env t2
+      return $ Let i n ty t1' (close n scope')
 
 -- | Inline Expansion
 inlineExpansion :: MonadFD4 m => TTerm -> m TTerm
@@ -136,10 +129,9 @@ inlineExpansion' nms env (Let i n ty t1 (Sc1 t2)) = do
   t1' <- inlineExpansion' nms env t1
   t2' <- inlineExpansion' nms ((n ,t1'):env) t2
   return $ Let i n ty t1' (Sc1 t2')
-inlineExpansion' nms env t@(App _ (Lam {}) (Const {})) = eval t
+inlineExpansion' nms env (App _ f@(Lam {}) c@(Const {})) = return $ subst c (Sc1 f)
 -- Se asume que la variable es siempre funcion
-inlineExpansion' nms env t@(App _ (V _ (Bound i)) (Const {})) = return t
-inlineExpansion' nms env t@(App _ (V {}) (Const {})) = eval t
+inlineExpansion' nms env t@(App _ (V _ (Bound i)) c@(Const {})) = return t
 -- Caso Aplicacion con t' complejo
 inlineExpansion' nms env (App i (V _ (Free n)) t') = do
   case lookup n env of
@@ -152,7 +144,7 @@ inlineExpansion' nms env (App i (V _ (Global f)) t') = do
     Just t -> inlineExpansion' nms env (App i t t')
 inlineExpansion' nms env t@(App i (Lam _ _ _ scope) t') =
   let z = freshen nms "x"
-  in return $ Let i z (getTy t') t' (Sc1 (open z scope))
+  in return $ Let i z (getTy t') t' scope
 inlineExpansion' nms env (App i t1 t2) = do
   t1' <- inlineExpansion' nms env t1
   t2' <- inlineExpansion' nms env t2
