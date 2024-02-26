@@ -32,7 +32,7 @@ import Lang
 import Parse ( P, tm, program, declOrTm, runP )
 import Elab ( elab, elabSDecl, elabSynTy, elabDecl )
 import Eval ( eval )
-import PPrint ( pp , ppTy, ppDecl )
+import PPrint ( pp , ppTy )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import System.CPUTime ( getCPUTime )
@@ -42,7 +42,7 @@ import Bytecompile ( bcWrite, bcRead, runBC, bytecompile )
 import Bytecompile8 ( bcWrite8, bcRead8, runBC8, bytecompile8 )
 import Optimizer ( optimize, deadCodeElimination )
 import C
-import IR
+import ClosureConvert
 
 prompt :: String
 prompt = "FD4> "
@@ -60,9 +60,6 @@ parseMode = (,,) <$>
   <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
   <|> flag Eval Eval (long "eval" <> short 'e' <> help "Evaluar programa")
   <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
-  -- <|> flag' Canon ( long "canon" <> short 'n' <> help "Imprimir canonicalización")
-  -- <|> flag' Assembler ( long "assembler" <> short 'a' <> help "Imprimir Assembler resultante")
-  -- <|> flag' Build ( long "build" <> short 'b' <> help "Compilar")
     )
    <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
    <*> flag False True (long "profile" <> short 'p' <> help "Muestra datos de profilling")
@@ -138,6 +135,7 @@ compileFile f = do
   setInter False
   m <- getMode
   printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
+  -- TODO: check if f is .fd4
   decls <- loadFile f
   decls' <- mapM handleDecl decls
   opt <- getOpt
@@ -152,8 +150,9 @@ compileFile f = do
       liftIO $ bcWrite8 bytecode8 bc8fout
       printFD4 ("Compilacion exitosa a " ++ bc8fout)
     CC -> do
-      let ccode = (ir2C . runCC) odecls'
-      printFD4 ccode
+      let code = runCC odecls'
+      printFD4 $ show code
+      let ccode = ir2C code
       liftIO $ ccWrite ccode cfout
       printFD4 ("Compilacion exitosa a " ++ cfout)
     Typecheck -> printFD4 "Typecheck exitoso"
@@ -197,7 +196,7 @@ handleDecl sdecl = do
     evalAddDecl f d = do
       tdecl <- tcDecl d
       opt <- getOpt
-      otdecl <- if opt then optimize tdecl else return tdecl -- optimizacion
+      otdecl <- if opt then optimize tdecl else return tdecl -- optimization
       tt <-  f (declBody otdecl)
       let otdecl' = otdecl {declBody = tt}
       addDecl otdecl'
@@ -330,6 +329,7 @@ typeCheckPhrase x = do
 runVM :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
 runVM f = do
   b <- liftIO $ bcRead f
+  -- TODO: check if f is .bc 
   t1 <- liftIO getCPUTime
   runBC b
   t2 <- liftIO getCPUTime
@@ -340,6 +340,7 @@ runVM f = do
 runVM8 :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
 runVM8 f = do
   b <- liftIO $ bcRead8 f
+  -- TODO: check if f is .bc8
   t1 <- liftIO getCPUTime
   runBC8 b
   t2 <- liftIO getCPUTime

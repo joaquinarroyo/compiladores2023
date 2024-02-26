@@ -1,2 +1,0 @@
-let y : Nat = 4
-let f(x:Nat):Nat = x

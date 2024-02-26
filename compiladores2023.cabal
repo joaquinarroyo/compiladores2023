@@ -44,6 +44,7 @@ executable compiladores2023
         Optimizer
         C
         IR
+        ClosureConvert
 
     ghc-options: 
         -threaded 
