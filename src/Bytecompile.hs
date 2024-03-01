@@ -160,7 +160,7 @@ bc' term = case term of
       Sub -> return $ t1' ++ t2' ++ [SUB]
   (Fix _ _ _ _ _ (Sc2 t))         -> do
     t' <- bc' t
-    return $ [FUNCTION, length t'] ++ t' ++ [RETURN, FIX]
+    return $ [FUNCTION, length t' + 1] ++ t' ++ [RETURN, FIX]
   (IfZ _ t1 t2 t3)                -> do
     t1' <- bc' t1
     t2' <- bc' t2

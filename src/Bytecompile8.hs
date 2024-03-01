@@ -139,8 +139,7 @@ bc8' term = case term of
       Sub -> return $ t1' ++ t2' ++ [SUB]
   (Fix _ _ _ _ _ (Sc2 t))         -> do
     t' <- bc8' t
-    return $ [FUNCTION, length t' + 1] ++
-             t' ++ [RETURN, FIX]
+    return $ [FUNCTION, length t' + 1] ++ t' ++ [RETURN, FIX]
   (IfZ _ t1 t2 t3)                -> do
     t1' <- bc8' t1
     t2' <- bc8' t2
