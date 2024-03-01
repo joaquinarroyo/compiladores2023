@@ -29,7 +29,6 @@ import Data.Binary.Get ( getWord32le, isEmpty )
 import Data.List ( intercalate )
 import Data.Char
 import Subst
-import PPrint ( pp )
 
 type Bytecode = [Int]
 
@@ -268,6 +267,6 @@ openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty t (close n (global2free 
 global2free :: Name -> TTerm -> TTerm
 global2free name = varChangerGlobal (\v p n -> if n == name then V p (Free n) else V p (Global n))
 
--- |
+-- | El nombre lo dice todo. No es lo mas eficiente pero funciona.
 dropDrops :: Bytecode -> Bytecode
-dropDrops = id
+dropDrops = reverse . dropWhile (== DROP) . reverse
