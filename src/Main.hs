@@ -83,14 +83,19 @@ main = execParser opts >>= go
     go (RunVM8, opt, pro, files) = runOrFail (Conf opt pro RunVM8) $ mapM_ runVM8 files
     go (m, opt, pro, files) = runOrFail (Conf opt pro m) $ mapM_ compileFile files
 
-runOrFail :: Conf -> FD4 a -> IO a
+runOrFail :: Show a => Conf -> FD4 a -> IO ()
 runOrFail c m = do
   r <- runFD4 m c
   case r of
     Left err -> do
       liftIO $ hPrint stderr err
       exitWith (ExitFailure 1)
-    Right v -> return v
+    Right v -> do
+      if pro c
+        then do
+          putStrLn (show v)
+          return ()
+        else return ()
 
 -- | Corre el intérprete interactivo (loop principal)
 repl :: (MonadFD4 m, MonadMask m) => [FilePath] -> InputT m ()
@@ -103,7 +108,7 @@ repl args = do
   pro <- lift getPro
   when (inter s) $ liftIO $ putStrLn
     ( "Entorno interactivo para FD4. \n"
-    ++ "Modo: " ++ show m ++ ", opt: " ++ show opt ++ ", pro: " ++ show pro ++ "\n"
+    ++ "Modo: " ++ show m ++ ", optimizations: " ++ show opt ++ ", profilling: " ++ show pro ++ "\n"
     ++ "Escriba :? para recibir ayuda.")
   loop
   where
@@ -158,7 +163,6 @@ compileFile f = do
     Typecheck -> printFD4 "Typecheck exitoso"
     _ -> return ()
   setInter i
-  showProfile
   where
     splitF = head $ splitOn "." f
     bcfout = splitF ++ ".bc"
@@ -333,8 +337,7 @@ runVM f = do
   t1 <- liftIO getCPUTime
   runBC b
   t2 <- liftIO getCPUTime
-  showProfile
-  printFD4 $ "Tiempo de ejecución de Bytecode: " ++ show (fromIntegral (t2-t1) / (10^12)) ++ " segundos"
+  return ()
 
 -- | Ejecuta un archivo bytecode8
 runVM8 :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
@@ -344,5 +347,4 @@ runVM8 f = do
   t1 <- liftIO getCPUTime
   runBC8 b
   t2 <- liftIO getCPUTime
-  showProfile
-  printFD4 $ "Tiempo de ejecución de Bytecode8: " ++ show (fromIntegral (t2-t1) / (10^12)) ++ " segundos"
+  return ()

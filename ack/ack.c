@@ -12,11 +12,9 @@ int ack(int i, int j) {
 }
 
 int main() {
-    clock_t start_time = clock();
-    int result = ack(3, 11);
-    clock_t end_time = clock();
-    double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-    printf("Ack(%d, %d) = %d\n", i, j, result);
-    printf("Time taken: %f seconds\n", time_taken);
+    int i = 3;
+    int j = 11;
+    int result = ack(i, j);
+    printf("Ack %d, %d = %d\n", i, j, result);
     return 0;
 }

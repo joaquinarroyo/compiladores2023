@@ -160,14 +160,12 @@ bc' term = case term of
       Sub -> return $ t1' ++ t2' ++ [SUB]
   (Fix _ _ _ _ _ (Sc2 t))         -> do
     t' <- bc' t
-    return $ [FUNCTION, length t' + 1] ++
-             t' ++ [RETURN, FIX]
+    return $ [FUNCTION, length t'] ++ t' ++ [RETURN, FIX]
   (IfZ _ t1 t2 t3)                -> do
     t1' <- bc' t1
     t2' <- bc' t2
     t3' <- bc' t3
-    return $ t1' ++ [CJUMP, length t2' + 2] ++
-             t2' ++ [JUMP, length t3'] ++ t3'
+    return $ t1' ++ [CJUMP, length t2'] ++ t2' ++ t3'
   (Let _ n ty t1 (Sc1 t2))        -> do
     t1' <- bc' t1
     t2' <- bc' t2
@@ -183,8 +181,7 @@ tc term = case term of
     t1' <- bc' t1
     t2' <- tc t2
     t3' <- tc t3
-    return $ t1' ++ [CJUMP, length t2' + 2] ++
-             t2' ++ [JUMP, length t3'] ++ t3'
+    return $ t1' ++ [CJUMP, length t2'] ++ t2' ++ t3'
   (Let _ n ty t1 (Sc1 t2)) -> do
     t1' <- bc' t1
     t2' <- tc t2
@@ -265,7 +262,7 @@ bytecompile m = do
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
 openModule :: Module -> TTerm
 openModule [Decl _ n _ t]      = global2free n t
-openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty (global2free n t) (close n (global2free n (openModule xs))) -- ver si hace falta hacer global2free sobre 't'
+openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty t (close n (global2free n (openModule xs))) -- ver si hace falta hacer global2free sobre 't'
 
 -- | Cambia las variables globales por variables libres
 global2free :: Name -> TTerm -> TTerm

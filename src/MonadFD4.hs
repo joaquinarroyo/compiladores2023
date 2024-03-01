@@ -19,7 +19,6 @@
 module MonadFD4 (
   FD4,
   runFD4,
-  -- runFD4Profile,
   lookupDecl,
   lookupTy,
   printFD4,
@@ -42,7 +41,6 @@ module MonadFD4 (
   tick,
   maxStack,
   addClousure,
-  showProfile,
   MonadFD4,
   module Control.Monad.Except,
   module Control.Monad.State)
@@ -76,7 +74,7 @@ y otras operaciones derivadas de ellas, como por ejemplo
    - @modify :: (GlEnv -> GlEnv) -> m ()@
    - @gets :: (GlEnv -> a) -> m a@  
 -}
-class (MonadIO m, MonadState GlEnv m, MonadError Error m, MonadReader Conf m) => MonadFD4 m where
+class (MonadIO m, MonadState GlEnv m, MonadError Error m, MonadReader Conf m, MonadWriter Profile m) => MonadFD4 m where
   tickCEK :: m ()
 
 getOpt :: MonadFD4 m => m Bool
@@ -155,20 +153,22 @@ catchErrors c = catchError (Just <$> c)
                               >> return Nothing)
 
 tick :: MonadFD4 m => m ()
-tick = modify (\s -> s {profile = tickProfile (profile s)})
+tick = do
+  mode <- getMode
+  writer ((), tickProfile mode)
+  return ()
 
 maxStack :: MonadFD4 m => Int -> m ()
-maxStack n = modify (\s -> s {profile = maxStackProfile (profile s) n})
+maxStack s = do
+  mode <- getMode
+  writer ((), maxStackProfile mode s)
+  return ()
 
 addClousure :: MonadFD4 m => Int -> m ()
-addClousure n = modify (\s -> s {profile = addClousureProfile (profile s) n})
-
-showProfile :: MonadFD4 m => m ()
-showProfile = do
-  pro <- getPro
-  when pro $ do
-    s <- get
-    printFD4 $ show (profile s)
+addClousure c = do
+  mode <- getMode
+  writer ((), addClousureProfile mode c)
+  return ()
 
 ----
 -- Importante, no eta-expandir porque GHC no hace una
@@ -178,19 +178,16 @@ showProfile = do
 -- | El tipo @FD4@ es un sinónimo de tipo para una mónada construida usando dos transformadores de mónada sobre la mónada @IO@.
 -- El transformador de mónad @ExcepT Error@ agrega a la mónada IO la posibilidad de manejar errores de tipo 'Errors.Error'.
 -- El transformador de mónadas @StateT GlEnv@ agrega la mónada @ExcepT Error IO@ la posibilidad de manejar un estado de tipo 'Global.GlEnv'.
-type FD4 = ReaderT Conf (StateT GlEnv (ExceptT Error IO))
-
-type FD4Profile = WriterT Profile (ReaderT Conf (StateT GlEnv (ExceptT Error IO))) -- ver esto
+type FD4 = ReaderT Conf (StateT GlEnv (WriterT Profile (ExceptT Error IO)))
 
 -- | Esta es una instancia vacía, ya que 'MonadFD4' no tiene funciones miembro.
 instance MonadFD4 FD4 where
   tickCEK = return ()
 
+-- runWriterT :: WriterT w m a -> m (a, w)
 -- 'runFD4\'' corre una computación de la mónad 'FD4' en el estado inicial 'Global.initialEnv' 
-runFD4' :: FD4 a -> Conf -> IO (Either Error (a, GlEnv))
-runFD4' c conf = runExceptT $ runStateT (runReaderT c conf) initEnv
-  where
-    initEnv = if pro conf then initialEnvWithProfile (mode conf) else initialEnv
+runFD4' :: FD4 a -> Conf -> IO (Either Error ((a, GlEnv), Profile))
+runFD4' fd4 conf = runExceptT $ runWriterT $ runStateT (runReaderT fd4 conf) initialEnv
 
-runFD4:: FD4 a -> Conf -> IO (Either Error a)
-runFD4 c conf = fmap fst <$> runFD4' c conf
+runFD4 :: FD4 a -> Conf -> IO (Either Error Profile)
+runFD4 c conf = fmap snd <$> runFD4' c conf

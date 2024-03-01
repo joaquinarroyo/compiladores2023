@@ -44,9 +44,8 @@ data GlEnv = GlEnv {
   lfile :: String,      -- ^ Último archivo cargado.
   cantDecl :: Int,      -- ^ Cantidad de declaraciones desde la última carga
   glb :: [Decl TTerm],  -- ^ Entorno con declaraciones globales
-  tysin :: [SDecl],     -- ^ Entorno con declaraciones de sinonimos de tipos
-  profile :: Profile    -- ^ Profile
-}
+  tysin :: [SDecl]      -- ^ Entorno con declaraciones de sinonimos de tipos
+} deriving Show
 
 -- | Entorno de tipado de declaraciones globales
 tyEnv :: GlEnv ->  [(Name,Ty)]
@@ -58,13 +57,20 @@ tySinEnv g = map (\(DirectTypeDecl _ n ty) -> (n, ty))  (tysin g)
 
 -- | Valor del estado inicial
 initialEnv :: GlEnv
-initialEnv = GlEnv False "" 0 [] [] NoneProfile
-
-initialEnvWithProfile :: Mode -> GlEnv
-initialEnvWithProfile m = GlEnv False "" 0 [] [] (getProfile m)
+initialEnv = GlEnv False "" 0 [] []
 
 -- | Profile
 data Profile = CEKProfile { cekSteps :: Int } | BytecodeProfile { bcOps :: Int, maxStackSize :: Int, clousures :: Int } | NoneProfile
+
+instance Semigroup Profile where
+  (<>) = mappend
+
+instance Monoid Profile where
+  mempty = NoneProfile
+  mappend NoneProfile p = p
+  mappend p NoneProfile = p
+  mappend (CEKProfile n) (CEKProfile m) = CEKProfile (n + m)
+  mappend (BytecodeProfile n m k) (BytecodeProfile n' m' k') = BytecodeProfile (n + n') (max m m') (k + k')
 
 instance Show Profile where
   show (CEKProfile n) = "CEK PROFILE: steps = " ++ show n
@@ -77,15 +83,18 @@ getProfile RunVM = BytecodeProfile 0 0 0
 getProfile RunVM8 = BytecodeProfile 0 0 0
 getProfile _ = NoneProfile
 
-tickProfile :: Profile -> Profile
-tickProfile (CEKProfile n) = CEKProfile (n + 1)
-tickProfile (BytecodeProfile n m k) = BytecodeProfile (n + 1) m k
-tickProfile NoneProfile = NoneProfile
+tickProfile :: Mode -> Profile
+tickProfile CEK = CEKProfile 1
+tickProfile RunVM = BytecodeProfile 1 0 0
+tickProfile RunVM8 = BytecodeProfile 1 0 0
+tickProfile _ = NoneProfile
 
-maxStackProfile :: Profile -> Int -> Profile
-maxStackProfile (BytecodeProfile n m k) m' = BytecodeProfile n (max m m') k
-maxStackProfile p _ = p
+maxStackProfile :: Mode -> Int -> Profile
+maxStackProfile RunVM s = BytecodeProfile 0 s 0
+maxStackProfile RunVM8 s = BytecodeProfile 0 s 0
+maxStackProfile m _ = NoneProfile
 
-addClousureProfile :: Profile -> Int -> Profile
-addClousureProfile (BytecodeProfile n m k) k' = BytecodeProfile n m (k + k')
-addClousureProfile p _ = p
+addClousureProfile :: Mode -> Int -> Profile
+addClousureProfile RunVM c = BytecodeProfile 0 0 c
+addClousureProfile RunVM8 c = BytecodeProfile 0 0 c
+addClousureProfile m _ = NoneProfile

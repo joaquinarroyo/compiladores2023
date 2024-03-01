@@ -145,8 +145,7 @@ bc8' term = case term of
     t1' <- bc8' t1
     t2' <- bc8' t2
     t3' <- bc8' t3
-    return $ t1' ++ [CJUMP, length t2' + 2] ++
-             t2' ++ [JUMP, length t3'] ++ t3'
+    return $ t1' ++ [CJUMP, length t2'] ++ t2' ++ t3'
   (Let _ n ty t1 (Sc1 t2))        -> do
     t1' <- bc8' t1
     t2' <- bc8' t2
@@ -162,8 +161,7 @@ tc8 term = case term of
     t1' <- bc8' t1
     t2' <- tc8 t2
     t3' <- tc8 t3
-    return $ t1' ++ [CJUMP, length t2' + 2] ++
-             t2' ++ [JUMP, length t3'] ++ t3'
+    return $ t1' ++ [CJUMP, length t2'] ++ t2' ++ t3'
   (Let _ n ty t1 (Sc1 t2)) -> do
     t1' <- bc8' t1
     t2' <- tc8 t2
