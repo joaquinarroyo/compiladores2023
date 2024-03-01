@@ -40,6 +40,7 @@ executable compiladores2023
         Helper
         CEK
         Bytecompile
+        Profile
         Bytecompile8
         Optimizer
         C

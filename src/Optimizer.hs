@@ -2,10 +2,10 @@
 module Optimizer where
 import MonadFD4 ( MonadFD4, lookupDecl, failFD4 )
 import Lang ( Tm(..), TTerm, Decl (declBody, Decl), Const (..), BinaryOp (..), Var (..), Name, getTy, Scope (Sc1), Scope2 (Sc2) )
-import Subst ( close, close2, open, open2, subst )
-import Eval (semOp, eval)
-import PPrint (ppName, freshen)
-import Helper (hasEffects, getUsedVarsNames)
+import Subst
+import Eval ( semOp)
+import PPrint ( ppName, freshen )
+import Helper ( hasEffects, getUsedVarsNames )
 
 -- | Max optimization iterations
 maxIt :: Int
