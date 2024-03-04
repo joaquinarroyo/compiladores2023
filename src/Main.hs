@@ -108,7 +108,7 @@ repl args = do
   pro <- lift getPro
   when (inter s) $ liftIO $ putStrLn
     ( "Entorno interactivo para FD4. \n"
-    ++ "Modo: " ++ show m ++ ", optimizations: " ++ show opt ++ ", profilling: " ++ show pro ++ "\n"
+    ++ "Modo: " ++ show m ++ ", optimization: " ++ show opt ++ ", profilling: " ++ show pro ++ "\n"
     ++ "Escriba :? para recibir ayuda.")
   loop
   where
@@ -156,7 +156,6 @@ compileFile f = do
       printFD4 ("Compilacion exitosa a " ++ bc8fout)
     CC -> do
       let code = runCC odecls'
-      printFD4 $ show code
       let ccode = ir2C code
       liftIO $ ccWrite ccode cfout
       printFD4 ("Compilacion exitosa a " ++ cfout)

@@ -1,5 +1,0 @@
-let x : Nat = 46000
-let y : Nat = 1923
-let a : Nat = print "x=" x
-let b : Nat = print "y=" y
-let ret : Nat = print "x+y=" (x + y)

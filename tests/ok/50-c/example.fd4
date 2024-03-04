@@ -4,3 +4,5 @@ let suma : Nat -> (Nat -> Nat) =
 let suma5 : Nat -> Nat = suma 5
 
 let quince : Nat = suma5 10
+ 
+let _ : Nat = print "suma 5 10 = " quince
