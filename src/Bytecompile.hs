@@ -208,7 +208,7 @@ runBC :: MonadFD4 m => Bytecode -> m ()
 runBC b = runBC' b [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
-runBC' b env s = tick >> maxStack (length s) >> runBC'' b env s
+runBC' b env s = runBC'' b env s
 
 runBC'' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
 runBC'' (RETURN:_) _ (v:(RA e c):stack)         = runBC' c e (v:stack)
@@ -218,10 +218,10 @@ runBC'' (FUNCTION:i:xs) env stack               =
   let drop' = drop i xs
       take' = take i xs
   in runBC' drop' env (Fun env take':stack)
-runBC'' (CALL:xs) env (v:(Fun ef cf):stack)     = addClousure 1 >> runBC' cf (v:ef) (RA env xs:stack)
+runBC'' (CALL:xs) env (v:(Fun ef cf):stack)     = runBC' cf (v:ef) (RA env xs:stack)
 runBC'' (ADD:xs) env ((I i1):(I i2):stack)      = runBC' xs env (I (i1 + i2):stack)
 runBC'' (SUB:xs) env ((I i1):(I i2):stack)      = runBC' xs env (I (max 0 (i2 - i1)):stack)
-runBC'' (FIX:xs) env ((Fun ef cf):stack)        = addClousure 2 >>
+runBC'' (FIX:xs) env ((Fun ef cf):stack)        =
   let envFix = Fun envFix cf:env
   in runBC' xs env (Fun envFix cf:stack)
 runBC'' (STOP:xs) env (v:stack)                 = return ()
@@ -240,7 +240,7 @@ runBC'' (CJUMP:i:xs) env ((I c):stack)          =
   case c of
     0 -> runBC' xs env stack
     _ -> runBC' (drop i xs) env stack
-runBC'' (TAILCALL:xs) env (v:(Fun ef cf):stack) = addClousure 1 >> runBC' cf (v:ef) stack
+runBC'' (TAILCALL:xs) env (v:(Fun ef cf):stack) = runBC' cf (v:ef) stack
 
 -- caso de fallo
 runBC'' i env stack                             = do

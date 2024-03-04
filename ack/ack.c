@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <time.h>
 
 int ack(int i, int j) {
     if (i == 0) {
@@ -15,6 +14,6 @@ int main() {
     int i = 3;
     int j = 11;
     int result = ack(i, j);
-    printf("Ack %d, %d = %d\n", i, j, result);
+    printf("ack %d %d = %d\n", i, j, result);
     return 0;
 }

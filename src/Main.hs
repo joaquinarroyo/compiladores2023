@@ -142,20 +142,20 @@ compileFile f = do
   printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
   -- TODO: check if f is .fd4
   decls <- loadFile f
-  decls' <- mapM handleDecl decls
+  hdecls <- mapM handleDecl decls
   opt <- getOpt
-  odecls' <- if opt then deadCodeElimination decls' else return decls'
+  ohdecls <- if opt then deadCodeElimination hdecls else return hdecls
   case m of
     Bytecompile -> do
-      bytecode <- bytecompile odecls'
+      bytecode <- bytecompile ohdecls
       liftIO $ bcWrite bytecode bcfout
       printFD4 ("Compilacion exitosa a " ++ bcfout)
     Bytecompile8 -> do
-      bytecode8 <- bytecompile8 odecls'
+      bytecode8 <- bytecompile8 ohdecls
       liftIO $ bcWrite8 bytecode8 bc8fout
       printFD4 ("Compilacion exitosa a " ++ bc8fout)
     CC -> do
-      let code = runCC odecls'
+      let code = runCC ohdecls
       let ccode = ir2C code
       liftIO $ ccWrite ccode cfout
       printFD4 ("Compilacion exitosa a " ++ cfout)

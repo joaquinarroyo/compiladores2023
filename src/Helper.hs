@@ -64,7 +64,7 @@ hasEffects (Let i n ty t1 scope) =
   in
     b1 || b2
 
--- |
+-- | Obtiene los nombres de variable usados en un termino
 getUsedVarsNames :: TTerm -> [Name]
 getUsedVarsNames (V _ (Free n)) = [n]
 getUsedVarsNames (V _ (Global n)) = [n]

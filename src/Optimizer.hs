@@ -11,7 +11,7 @@ import Helper ( hasEffects, getUsedVarsNames )
 maxIt :: Int
 maxIt = 10
 
--- |
+-- | Optimize a single declaration
 optimize :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
 optimize d = do
     oBody <- optimize' maxIt (declBody d)
@@ -52,9 +52,9 @@ constantFolding (BinaryOp i op (Const _ (CNat n1)) (Const _ (CNat n2))) =
 constantFolding (BinaryOp i Add t (Const _ (CNat 0))) = return t
 constantFolding (BinaryOp i Add (Const _ (CNat 0)) t) = return t
 constantFolding (BinaryOp i Sub t (Const _ (CNat 0))) = return t
-constantFolding b@(BinaryOp i Sub (Const _ (CNat 0)) t) =
+constantFolding b@(BinaryOp _ Sub (Const i (CNat 0)) t) =
     if hasEffects t then return b else return $ Const i (CNat 0)
-constantFolding t = return t -- ver si falta algun caso 
+constantFolding t = return t
 
 -- | Constant Propagation
 constantPropagation :: MonadFD4 m => [(Name, TTerm)] -> TTerm -> m TTerm
