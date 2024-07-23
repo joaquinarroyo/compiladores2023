@@ -57,8 +57,8 @@ parseMode = (,,) <$>
   <|> flag' Bytecompile8 (long "bytecompile8" <> short 'n' <> help "Compilar a la BVM8")
   <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
   <|> flag' RunVM8 (long "runVM8" <> short '8' <> help "Ejecutar bytecode8 en la BVM")
-  <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
-  <|> flag Eval Eval (long "eval" <> short 'e' <> help "Evaluar programa")
+  <|> flag' Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
+  <|> flag' Eval (long "eval" <> short 'e' <> help "Evaluar programa")
   <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
     )
    <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
@@ -140,22 +140,22 @@ compileFile f = do
   setInter False
   m <- getMode
   printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
-  -- TODO: check if f is .fd4
   decls <- loadFile f
-  hdecls <- mapM handleDecl decls
+  odecls <- mapM optimizeDecl decls
   opt <- getOpt
-  ohdecls <- if opt then deadCodeElimination hdecls else return hdecls
+  odecls' <- if opt then deadCodeElimination odecls else return odecls
+  edecls <- mapM evalDecl odecls'
   case m of
     Bytecompile -> do
-      bytecode <- bytecompile ohdecls
+      bytecode <- bytecompile edecls
       liftIO $ bcWrite bytecode bcfout
       printFD4 ("Compilacion exitosa a " ++ bcfout)
     Bytecompile8 -> do
-      bytecode8 <- bytecompile8 ohdecls
+      bytecode8 <- bytecompile8 edecls
       liftIO $ bcWrite8 bytecode8 bc8fout
       printFD4 ("Compilacion exitosa a " ++ bc8fout)
     CC -> do
-      let code = runCC ohdecls
+      let code = runCC edecls
       let ccode = ir2C code
       liftIO $ ccWrite ccode cfout
       printFD4 ("Compilacion exitosa a " ++ cfout)
@@ -176,34 +176,47 @@ parseIO filename p x =
     Right r -> return r
 
 -- | Maneja una declaración superficial
--- Ver de usar bandera para no evaluar terminos al cargar archivos
-handleDecl ::  MonadFD4 m => SDecl -> m (Decl TTerm)
-handleDecl sdecl = do
+optimizeDecl ::  MonadFD4 m => SDecl -> m (Decl TTerm)
+optimizeDecl sdecl = do
   m <- getMode
   mdecl <- elabSDecl sdecl
   let decl = elabDecl (fromJust mdecl)
   case m of
-    Interactive -> evalAddDecl eval decl
-    Eval -> evalAddDecl eval decl
-    InteractiveCEK -> evalAddDecl seek decl
-    CEK -> evalAddDecl seek decl
-    Bytecompile -> evalAddDecl return decl
-    Bytecompile8 -> evalAddDecl return decl
-    CC -> evalAddDecl return decl
     Typecheck -> do
       decl' <- tcDecl decl
       addDecl decl'
       return decl'
+    _ -> optDecl decl
   where
-    evalAddDecl :: MonadFD4 m => (TTerm -> m TTerm) -> Decl Term -> m (Decl TTerm)
-    evalAddDecl f d = do
+    optDecl :: MonadFD4 m => Decl Term -> m (Decl TTerm)
+    optDecl d = do
       tdecl <- tcDecl d
+      addDecl tdecl
       opt <- getOpt
-      otdecl <- if opt then optimize tdecl else return tdecl -- optimization
-      tt <-  f (declBody otdecl)
-      let otdecl' = otdecl {declBody = tt}
-      addDecl otdecl'
-      return otdecl'
+      odecl <- if opt then optimize tdecl else return tdecl -- optimization
+      return odecl
+
+-- |
+evalDecl :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
+evalDecl decl = do
+  m <- getMode
+  case m of
+    Interactive -> evalDecl' eval decl
+    InteractiveCEK -> evalDecl' seek decl
+    Eval -> evalDecl' eval decl
+    CEK -> evalDecl' seek decl
+    Bytecompile -> evalDecl' return decl
+    Bytecompile8 -> evalDecl' return decl
+    CC -> evalDecl' return decl
+    _ -> return decl
+  where
+    evalDecl' :: MonadFD4 m => (TTerm -> m TTerm) -> Decl TTerm -> m (Decl TTerm)
+    evalDecl' f d = do
+      let t = declBody d
+      t' <- f t
+      let decl = d { declBody = t' }
+      addDecl decl
+      return decl
 
 data Command = Compile CompileForm
              | PPrint String
@@ -286,7 +299,11 @@ compilePhrase :: MonadFD4 m => String -> m ()
 compilePhrase x = do
   dot <- parseIO "<interactive>" declOrTm x
   case dot of
-    Left d  -> void $ handleDecl d
+    Left d  -> do
+      d' <- optimizeDecl d
+      d'' <- evalDecl d'
+      return ()
+      -- void $ evalDecl (optimizeDecl d)
     Right t -> handleTerm t
 
 -- | Evalua un término superficial
