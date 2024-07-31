@@ -186,4 +186,3 @@ addReferences (Let _ _ _ t1 (Sc1 t2)) = do
   r2 <- addReferences t2
   return $ r1 ++ r2
 addReferences _ = return []
-

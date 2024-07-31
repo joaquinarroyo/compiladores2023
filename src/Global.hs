@@ -58,4 +58,3 @@ tySinEnv g = map (\(DirectTypeDecl _ n ty) -> (n, ty))  (tysin g)
 -- | Valor del estado inicial
 initialEnv :: GlEnv
 initialEnv = GlEnv False "" 0 [] []
-

@@ -134,7 +134,7 @@ bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
 bc :: MonadFD4 m => TTerm -> m Bytecode
 bc t = do
   t' <- bc' t
-  return $ t' ++ [STOP]
+  return $ t'
 
 bc' :: MonadFD4 m => TTerm -> m Bytecode
 bc' term = case term of
@@ -208,20 +208,20 @@ runBC :: MonadFD4 m => Bytecode -> m ()
 runBC b = runBC' b [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
-runBC' b env s = runBC'' b env s
+runBC' b env s = tick >> maxStack (length s) >> runBC'' b env s
 
 runBC'' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
 runBC'' (RETURN:_) _ (v:(RA e c):stack)         = runBC' c e (v:stack)
 runBC'' (CONST:i:xs) env stack                  = runBC' xs env (I i:stack)
 runBC'' (ACCESS:i:xs) env stack                 = runBC' xs env (env!!i:stack)
-runBC'' (FUNCTION:i:xs) env stack               =
+runBC'' (FUNCTION:i:xs) env stack               = addClousure 1 >>
   let drop' = drop i xs
       take' = take i xs
   in runBC' drop' env (Fun env take':stack)
-runBC'' (CALL:xs) env (v:(Fun ef cf):stack)     = runBC' cf (v:ef) (RA env xs:stack)
+runBC'' (CALL:xs) env (v:(Fun ef cf):stack)     = addClousure 1 >> runBC' cf (v:ef) (RA env xs:stack)
 runBC'' (ADD:xs) env ((I i1):(I i2):stack)      = runBC' xs env (I (i1 + i2):stack)
 runBC'' (SUB:xs) env ((I i1):(I i2):stack)      = runBC' xs env (I (max 0 (i2 - i1)):stack)
-runBC'' (FIX:xs) env ((Fun ef cf):stack)        =
+runBC'' (FIX:xs) env ((Fun ef cf):stack)        = addClousure 2 >>
   let envFix = Fun envFix cf:env
   in runBC' xs env (Fun envFix cf:stack)
 runBC'' (STOP:xs) env (v:stack)                 = return ()
@@ -256,12 +256,12 @@ type Module = [Decl TTerm]
 bytecompile :: MonadFD4 m => Module -> m Bytecode
 bytecompile m = do
   bytecode <- bc $ openModule m
-  return $ dropDrops bytecode
+  return $ (dropDrops bytecode ++ [STOP])
 
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
 openModule :: Module -> TTerm
 openModule [Decl _ n _ t]      = global2free n t
-openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty t (close n (global2free n (openModule xs))) -- ver si hace falta hacer global2free sobre 't'
+openModule ((Decl i n ty t):xs) = Let (i, getTy t) n ty t (close n (global2free n (openModule xs)))
 
 -- | Cambia las variables globales por variables libres
 global2free :: Name -> TTerm -> TTerm

@@ -88,5 +88,3 @@ getUsedVarsNames (Let i n ty t scope) =
   let
     (n1, n2) = (getUsedVarsNames t, getUsedVarsNames (open n scope))
   in n1 ++ n2
-  
-    

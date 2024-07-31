@@ -106,8 +106,6 @@ ty2doc (FunTy x y mty) = case mty of
                           Nothing -> sep [ty2doc x, typeOpColor (pretty "->"),ty2doc y] 
                           Just ty -> typeColor (pretty ty)
 ty2doc (SynTy n) = typeColor (pretty n)
-  
-  
 
 -- | Pretty printer para tipos (String)
 ppTy :: Ty -> String

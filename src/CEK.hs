@@ -116,7 +116,6 @@ replaceEnvScope2 (Sc2 t) c env                            = do
   t' <- replaceEnv' t c env
   return $ Sc2 t'
 
-
 -- | Funcion auxiliar para el reemplazo de valores del env en los terminos
 replaceEnv' :: MonadFD4 m => TTerm -> Int -> Env -> m TTerm
 replaceEnv' t c []                            = return t

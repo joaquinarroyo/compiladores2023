@@ -91,7 +91,7 @@ runOrFail c m = do
       liftIO $ hPrint stderr err
       exitWith (ExitFailure 1)
     Right v -> do
-      if pro c
+      if pro c && v \= NoneProfile
         then do
           putStrLn (show v)
           return ()
@@ -349,7 +349,6 @@ typeCheckPhrase x = do
 runVM :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
 runVM f = do
   b <- liftIO $ bcRead f
-  -- TODO: check if f is .bc 
   t1 <- liftIO getCPUTime
   runBC b
   t2 <- liftIO getCPUTime
@@ -359,7 +358,6 @@ runVM f = do
 runVM8 :: (MonadFD4 m, MonadIO m) => FilePath -> m ()
 runVM8 f = do
   b <- liftIO $ bcRead8 f
-  -- TODO: check if f is .bc8
   t1 <- liftIO getCPUTime
   runBC8 b
   t2 <- liftIO getCPUTime

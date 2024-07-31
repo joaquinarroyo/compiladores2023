@@ -174,47 +174,50 @@ runBC8 :: MonadFD4 m => Bytecode -> m ()
 runBC8 b = runBC8' b [] []
 
 runBC8' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
-runBC8' (RETURN:_) _ (v:(RA e c):stack)        = runBC8' c e (v:stack)
-runBC8' (SHORT:xs) env stack                   = 
+runBC8' b env s = tick >> maxStack (length s) >> runBC8'' b env s
+
+runBC8'' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
+runBC8'' (RETURN:_) _ (v:(RA e c):stack)        = runBC8' c e (v:stack)
+runBC8'' (SHORT:xs) env stack                   = 
   let (i, xs') = getNumber (SHORT:xs)
   in runBC8' xs' env (I i:stack)
-runBC8' (INT:xs) env stack                     = 
+runBC8'' (INT:xs) env stack                     = 
   let (i, xs') = getNumber (INT:xs)
   in runBC8' xs' env (I i:stack)
-runBC8' (LONG:xs) env stack                    = 
+runBC8'' (LONG:xs) env stack                    = 
   let (i, xs') = getNumber (LONG:xs)
   in runBC8' xs' env (I i:stack)
-runBC8' (ACCESS:i:xs) env stack                = runBC8' xs env (env!!i:stack)
-runBC8' (FUNCTION:i:xs) env stack              =
+runBC8'' (ACCESS:i:xs) env stack                = runBC8' xs env (env!!i:stack)
+runBC8'' (FUNCTION:i:xs) env stack              = addClousure 1 >>
   let drop' = drop i xs
       take' = take i xs
   in runBC8' drop' env (Fun env take':stack)
-runBC8' (CALL:xs) env (v:(Fun ef cf):stack)    = runBC8' cf (v:ef) (RA env xs:stack)
-runBC8' (ADD:xs) env ((I i1):(I i2):stack)     = runBC8' xs env (I (i1 + i2):stack)
-runBC8' (SUB:xs) env ((I i1):(I i2):stack)     = runBC8' xs env (I (max 0 (i2 - i1)):stack)
-runBC8' (FIX:xs) env ((Fun ef cf):stack)       =
+runBC8'' (CALL:xs) env (v:(Fun ef cf):stack)    = addClousure 1 >> runBC8' cf (v:ef) (RA env xs:stack)
+runBC8'' (ADD:xs) env ((I i1):(I i2):stack)     = runBC8' xs env (I (i1 + i2):stack)
+runBC8'' (SUB:xs) env ((I i1):(I i2):stack)     = runBC8' xs env (I (max 0 (i2 - i1)):stack)
+runBC8'' (FIX:xs) env ((Fun ef cf):stack)       = addClousure 2 >>
   let envFix = Fun envFix cf:env
   in runBC8' xs env (Fun envFix cf:stack)
-runBC8' (STOP:xs) env (v:stack)                = return ()
-runBC8' (JUMP:i:xs) env stack                  = runBC8' (drop i xs) env stack
-runBC8' (SHIFT:xs) env (v:stack)               = runBC8' xs (v:env) stack
-runBC8' (DROP:xs) (v:env) stack                = runBC8' xs env stack
-runBC8' (PRINT:xs) env stack                   =
+runBC8'' (STOP:xs) env (v:stack)                = return ()
+runBC8'' (JUMP:i:xs) env stack                  = runBC8' (drop i xs) env stack
+runBC8'' (SHIFT:xs) env (v:stack)               = runBC8' xs (v:env) stack
+runBC8'' (DROP:xs) (v:env) stack                = runBC8' xs env stack
+runBC8'' (PRINT:xs) env stack                   =
   let (msg, _:xs') = span (/=NULL) xs
       s = bc2string8 msg
   in do printFD4nobreak s
         runBC8' xs' env stack
-runBC8' (PRINTN:xs) env s@(I i:stack)          =
+runBC8'' (PRINTN:xs) env s@(I i:stack)          =
   do printFD4 (show i)
      runBC8' xs env s
-runBC8' (CJUMP:i:xs) env ((I c):stack)         =
+runBC8'' (CJUMP:i:xs) env ((I c):stack)         =
   case c of
     0 -> runBC8' xs env stack
     _ -> runBC8' (drop i xs) env stack
-runBC8' (TAILCALL:xs) env (v:(Fun ef cf):stack) =
+runBC8'' (TAILCALL:xs) env (v:(Fun ef cf):stack) =
   runBC8' cf (v:ef) stack
 -- caso de fallo
-runBC8' i env stack = do
+runBC8'' i env stack = do
   printFD4 $ show (showOps i)
   printFD4 $ show env
   printFD4 $ show stack
@@ -223,8 +226,8 @@ runBC8' i env stack = do
 -- | Bytecompile
 bytecompile8 :: MonadFD4 m => Module -> m Bytecode
 bytecompile8 m = do
-  bc <- bc8 $ openModule m
-  return $ dropDrops bc
+  bytecode <- bc8 $ openModule m
+  return $ (dropDrops bytecode ++ [STOP])
 
 -- |
 getNumber :: Bytecode -> (Int, Bytecode)
