@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 {-
   Module      : Main
@@ -43,6 +44,7 @@ import Bytecompile8 ( bcWrite8, bcRead8, runBC8, bytecompile8 )
 import Optimizer ( optimize, deadCodeElimination )
 import C
 import ClosureConvert
+import Profile ( Profile(..) )
 
 prompt :: String
 prompt = "FD4> "
@@ -91,9 +93,9 @@ runOrFail c m = do
       liftIO $ hPrint stderr err
       exitWith (ExitFailure 1)
     Right v -> do
-      if pro c && v \= NoneProfile
+      if pro c && v /= NoneProfile
         then do
-          putStrLn (show v)
+          print v
           return ()
         else return ()
 
@@ -125,7 +127,7 @@ repl args = do
 -- | Carga un archivo
 loadFile ::  MonadFD4 m => FilePath -> m [SDecl]
 loadFile f = do
-  let filename = reverse(dropWhile isSpace (reverse f))
+  let filename = reverse (dropWhile isSpace (reverse f))
   x <- liftIO $ catch (readFile filename)
               (\e -> do let err = show (e :: IOException)
                         hPutStrLn stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err)

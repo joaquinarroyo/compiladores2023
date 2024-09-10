@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wnoncanonical-monoid-instances #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-noncanonical-monoid-instances #-}
 
 module Profile where
 
@@ -25,6 +26,12 @@ instance Show Profile where
   show (CEKProfile n)           = "CEK PROFILE: steps = " ++ show n
   show (BytecodeProfile n m k)  = "Bytecode PROFILE: steps = " ++ show n ++ ", max stack size = " ++ show m ++ ", clousures = " ++ show k
   show NoneProfile              = ""
+
+instance Eq Profile where
+  (CEKProfile n) == (CEKProfile m)                 = n == m
+  (BytecodeProfile n m k) == (BytecodeProfile n' m' k') = n == n' && m == m' && k == k'
+  NoneProfile == NoneProfile                        = True
+  _ == _                                            = False
 
 getProfile :: Mode -> Profile
 getProfile CEK    = CEKProfile 0
