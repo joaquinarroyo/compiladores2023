@@ -130,7 +130,7 @@ bc8' term = case term of
     return $ t1' ++ t2' ++ [CALL]
   (Print _ s t)                   -> do
     t' <- bc8' t
-    return $ [PRINT] ++ string2bc8 s ++ [NULL] ++ t' ++ [PRINTN]
+    return $ t' ++ [PRINT] ++ string2bc8 s ++ [NULL, PRINTN]
   (BinaryOp _ op t1 t2)           -> do
     t1' <- bc8' t1
     t2' <- bc8' t2

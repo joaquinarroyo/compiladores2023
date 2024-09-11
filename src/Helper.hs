@@ -35,34 +35,35 @@ checkSins p ((v, vty):vs) = do
   return $ (v, vty') : vs'
 
 -- | Chequea si un termino tiene efectos secundarios
-hasEffects :: TTerm -> Bool
-hasEffects (V _ _) = False
-hasEffects (Const _ _) = False
+hasEffects :: MonadFD4 m => TTerm -> m Bool
+hasEffects (V i (Global n)) = do
+  printFD4 $ "Checking " ++ show n
+  mt <- lookupDecl n
+  case mt of
+    Nothing -> return False
+    Just t  -> hasEffects t
+hasEffects (V _ _) = return False
+hasEffects (Const _ _) = return False
 hasEffects (Lam _ n _ scope) = hasEffects (open n scope)
-hasEffects (App _ t1 t2) =
-  let
-    b1 = hasEffects t1
-    b2 = hasEffects t2
-  in b1 || b2
-hasEffects (Print {}) = True
-hasEffects (BinaryOp i op t1 t2) =
-  let
-    b1 = hasEffects t1
-    b2 = hasEffects t2
-  in b1 || b2
+hasEffects (App _ t1 t2) = do
+  b1 <- hasEffects t1
+  b2 <- hasEffects t2
+  return $ b1 || b2
+hasEffects (Print {}) = return True
+hasEffects (BinaryOp i op t1 t2) = do
+  b1 <- hasEffects t1
+  b2 <- hasEffects t2
+  return $ b1 || b2
 hasEffects (Fix _ n1 _ n2 _ scope) = hasEffects (open2 n1 n2 scope)
-hasEffects (IfZ i t1 t2 t3) =
-  let
-    b1 = hasEffects t1
-    b2 = hasEffects t2
-    b3 = hasEffects t3
-  in b1 || b2 || b3
-hasEffects (Let i n ty t1 scope) =
-  let
-    b1 = hasEffects t1
-    b2 = hasEffects (open n scope)
-  in
-    b1 || b2
+hasEffects (IfZ i t1 t2 t3) = do
+  b1 <- hasEffects t1
+  b2 <- hasEffects t2
+  b3 <- hasEffects t3
+  return $ b1 || b2 || b3
+hasEffects (Let i n ty t1 scope) = do
+  b1 <- hasEffects t1
+  b2 <- hasEffects (open n scope)
+  return $ b1 || b2
 
 -- | Obtiene los nombres de variable usados en un termino
 getUsedVarsNames :: TTerm -> [Name]

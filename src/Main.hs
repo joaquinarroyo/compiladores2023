@@ -215,6 +215,7 @@ evalDecl decl = do
     evalDecl' :: MonadFD4 m => (TTerm -> m TTerm) -> Decl TTerm -> m (Decl TTerm)
     evalDecl' f d = do
       let t = declBody d
+      ttt <- pp t
       t' <- f t
       let decl = d { declBody = t' }
       addDecl decl

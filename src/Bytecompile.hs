@@ -17,7 +17,7 @@
 module Bytecompile
   ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps, 
     bytecompile, Module, openModule, ValBytecode(..), Env, Stack,
-    dropDrops )
+    dropDrops, showOps )
  where
 
 import Lang
@@ -150,7 +150,7 @@ bc' term = case term of
     return $ t1' ++ t2' ++ [CALL]
   (Print _ s t)                   -> do
     t' <- bc' t
-    return $ [PRINT] ++ string2bc s ++ [NULL] ++ t' ++ [PRINTN]
+    return $ t' ++ [PRINT] ++ string2bc s ++ [NULL, PRINTN]
   (BinaryOp _ op t1 t2)           -> do
     t1' <- bc' t1
     t2' <- bc' t2
