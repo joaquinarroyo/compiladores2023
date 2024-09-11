@@ -4,4 +4,3 @@ dist-newstyle/*
 *.bc
 *.bc8
 *.c
-*.out

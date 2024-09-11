@@ -141,7 +141,7 @@ compileFile f = do
   i <- getInter
   setInter False
   m <- getMode
-  printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m)
+  -- printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m) // Deshabilitado para testing comparando archivos .out y .actual_out
   decls <- loadFile f
   odecls <- mapM optimizeDecl decls
   opt <- getOpt

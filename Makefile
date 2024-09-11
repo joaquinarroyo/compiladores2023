@@ -15,7 +15,7 @@ interp:
 	cabal repl
 
 run: build
-	 cabal run
+	cabal run
 
 include testing.mk
 test: build vm
@@ -23,5 +23,8 @@ test: build vm
 
 vm:
 	$(MAKE) -C vm
+
+clean:
+	find tests/ok/ \( -name "*.actual*" -o -name "*.bc8" -o -name "*.check*" -o -name "*.c" -o -name "*.bc" -o -name "*.bin" \) -exec rm {} \;
 
 .PHONY: vm
