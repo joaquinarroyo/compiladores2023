@@ -97,7 +97,7 @@ constantPropagation env (IfZ i t1 t2 t3) = do
 constantPropagation env (Let i n ty t1 (Sc1 t2)) = do
   t1' <- constantPropagation env t1
   case t1' of
-    c@(Const _ v) -> constantPropagation ((n, c):env) t2
+    c@(Const _ v) -> constantPropagation ((n, c):env) (open n (Sc1 t2))
     _ -> do
       scope' <- constantPropagation env t2
       return $ Let i n ty t1' (close n scope')
@@ -131,8 +131,7 @@ inlineExpansion' nms env (Let i n ty t1 (Sc1 t2)) = do
   t1' <- inlineExpansion' nms env t1
   t2' <- inlineExpansion' nms ((n ,t1'):env) t2
   return $ Let i n ty t1' (Sc1 t2')
-inlineExpansion' nms env (App _ f@(Lam i n ty sc) c@(Const {})) = do
-  return $ subst c sc
+inlineExpansion' nms env t@(App _ f@(Lam i n ty sc) c@(Const {})) = return $ subst c sc
 -- Se asume que la variable es siempre funcion
 inlineExpansion' nms env t@(App _ (V _ (Bound i)) c@(Const {})) = return t
 -- Caso Aplicacion con t' complejo

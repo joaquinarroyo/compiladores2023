@@ -30,3 +30,4 @@ type T29 = T28
 type T30 = T29
 
 let f (x : T13) (y : T24) : T4 = x+y
+let test : T29 = print "" (f 2 4)

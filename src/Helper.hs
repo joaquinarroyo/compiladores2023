@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-module Helper where 
+module Helper where
 
 import Lang
 import Common
 import MonadFD4
-import Subst (open, open2)
+import Subst ( open, open2 )
 
 -- | Transforma bindings a tipos
 bindingToType :: [(Name, Ty)] -> Ty -> Ty
@@ -37,7 +37,6 @@ checkSins p ((v, vty):vs) = do
 -- | Chequea si un termino tiene efectos secundarios
 hasEffects :: MonadFD4 m => TTerm -> m Bool
 hasEffects (V i (Global n)) = do
-  printFD4 $ "Checking " ++ show n
   mt <- lookupDecl n
   case mt of
     Nothing -> return False

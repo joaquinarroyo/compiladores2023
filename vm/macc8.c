@@ -366,7 +366,7 @@ void run(code init_c)
 		}
 
 		case PRINTN: {
-			uint8_t i = s[-1].i;
+			uint32_t i = s[-1].i;
 			wprintf(L"%" PRIu8 "\n", i);
 			break;
 		}

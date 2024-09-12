@@ -1,9 +1,9 @@
 TESTDIRS += tests/ok/00-basicos
-# TESTDIRS += tests/ok/10-sugar
-# TESTDIRS += tests/ok/20-tysym
-# TESTDIRS += tests/ok/30-Bytecode
-# TESTDIRS += tests/ok/40-opt
-# TESTDIRS += tests/ok/50-c
+TESTDIRS += tests/ok/10-sugar
+TESTDIRS += tests/ok/20-tysym
+TESTDIRS += tests/ok/30-Bytecode
+TESTDIRS += tests/ok/40-opt
+TESTDIRS += tests/ok/50-c
 
 TESTS	:= $(shell find $(TESTDIRS) -name '*.fd4' -type f | sort)
 
@@ -16,8 +16,8 @@ EXE	:= $(shell cabal exec whereis compiladores2023 | awk '{print $$2};')
 VM	:= ./vm/macc
 VM8 := ./vm/macc8
 CC     := gcc
-CFLAGS := -lgc
-
+CFLAGS := -lgc -w
+ 
 EXTRAFLAGS	:=
 # EXTRAFLAGS	+= --optimize
 
@@ -27,10 +27,10 @@ CHECK	+= $(patsubst %,%.check_eval,$(TESTS))
 CHECK	+= $(patsubst %,%.check_cek,$(TESTS))
 CHECK	+= $(patsubst %,%.check_bc_h,$(TESTS))
 CHECK	+= $(patsubst %,%.check_bc,$(TESTS))
-CHECK	+= $(patsubst %,%.check_eval_opt,$(TESTS))
 CHECK	+= $(patsubst %,%.check_bc8_h,$(TESTS))
-CHECK	+= $(patsubst %,%.check_bc8,$(TESTS))
 CHECK	+= $(patsubst %,%.check_cc,$(TESTS))
+CHECK	+= $(patsubst %,%.check_bc8,$(TESTS))
+CHECK	+= $(patsubst %,%.check_eval_opt,$(TESTS))
 
 # Ejemplo: así se puede apagar un test en particular.
 # CHECK	:= $(filter-out tests/correctos/grande.fd4.check_bc,$(CHECK))
@@ -114,7 +114,6 @@ accept: $(patsubst %,%.accept,$(TESTS))
 
 # Evaluar código optimizado, sólo vía eval, se supone que debe ser
 # suficiente.
-
 %.actual_out_eval_opt: % $(EXE)
 	$(Q)$(EXE) $(EXTRAFLAGS) --eval --optimize $< > $@
 

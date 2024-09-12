@@ -80,6 +80,10 @@ data Decl a = Decl
 instance Eq (Decl TTerm) where
   (==) :: Decl TTerm -> Decl TTerm -> Bool
   (==) d1 d2 = declName d1 == declName d2 
+
+instance Eq (Decl STerm) where
+  (/=) :: Decl STerm -> Decl STerm -> Bool
+  (/=) d1 d2 = declName d1 /= declName d2
   
 -- | tipo de datos de declaraciones superficiales y sinonimos de tipos
 data SDecl = 

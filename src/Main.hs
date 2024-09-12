@@ -141,9 +141,9 @@ compileFile f = do
   i <- getInter
   setInter False
   m <- getMode
-  -- printFD4 ("Abriendo " ++ f ++ " en modo " ++ show m) // Deshabilitado para testing comparando archivos .out y .actual_out
   decls <- loadFile f
-  odecls <- mapM optimizeDecl decls
+  mdecls <- mapM elabSDecl decls
+  odecls <- mapM optimizeDecl (filter (/= Nothing) mdecls)
   opt <- getOpt
   odecls' <- if opt then deadCodeElimination odecls else return odecls
   edecls <- mapM evalDecl odecls'
@@ -178,17 +178,16 @@ parseIO filename p x =
     Right r -> return r
 
 -- | Maneja una declaración superficial
-optimizeDecl ::  MonadFD4 m => SDecl -> m (Decl TTerm)
-optimizeDecl sdecl = do
+optimizeDecl ::  MonadFD4 m => Maybe (Decl STerm) -> m (Decl TTerm)
+optimizeDecl decl = do
   m <- getMode
-  mdecl <- elabSDecl sdecl
-  let decl = elabDecl (fromJust mdecl)
+  let decl' = elabDecl (fromJust decl)
   case m of
     Typecheck -> do
-      decl' <- tcDecl decl
+      decl' <- tcDecl decl'
       addDecl decl'
       return decl'
-    _ -> optDecl decl
+    _ -> optDecl decl'
   where
     optDecl :: MonadFD4 m => Decl Term -> m (Decl TTerm)
     optDecl d = do
@@ -303,8 +302,9 @@ compilePhrase x = do
   dot <- parseIO "<interactive>" declOrTm x
   case dot of
     Left d  -> do
-      d' <- optimizeDecl d
-      d'' <- evalDecl d'
+      d' <- elabSDecl d
+      d'' <- optimizeDecl d'
+      evalDecl d''
       return ()
       -- void $ evalDecl (optimizeDecl d)
     Right t -> handleTerm t
