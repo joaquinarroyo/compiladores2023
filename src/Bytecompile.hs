@@ -17,7 +17,7 @@
 module Bytecompile
   ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps, 
     bytecompile, Module, openModule, ValBytecode(..), Env, Stack,
-    dropDrops, showOps )
+    dropDrops )
  where
 
 import Lang
