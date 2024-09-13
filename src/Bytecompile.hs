@@ -164,7 +164,7 @@ bc' term = case term of
     t1' <- bc' t1
     t2' <- bc' t2
     t3' <- bc' t3
-    return $ t1' ++ [CJUMP, length t2'] ++ t2' ++ t3'
+    return $ t1' ++ [CJUMP, length t2' + 2] ++ t2' ++ [JUMP, length t3'] ++ t3'
   (Let _ n ty t1 (Sc1 t2))        -> do
     t1' <- bc' t1
     t2' <- bc' t2
@@ -180,7 +180,7 @@ tc term = case term of
     t1' <- bc' t1
     t2' <- tc t2
     t3' <- tc t3
-    return $ t1' ++ [CJUMP, length t2'] ++ t2' ++ t3'
+    return $ t1' ++ [CJUMP, length t2' + 2] ++ t2' ++ [JUMP, length t3'] ++ t3'
   (Let _ n ty t1 (Sc1 t2)) -> do
     t1' <- bc' t1
     t2' <- tc t2

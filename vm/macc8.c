@@ -379,6 +379,12 @@ void run(code init_c)
 			break;
 		}
 
+		case JUMP: {
+			uint32_t i = *c++;
+			c += i;
+			break;
+		}
+
 		case CJUMP: {
 			uint8_t i = *c++;
 			uint8_t con = (*--s).i;
