@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 
-module Bytecompile8 
+module Bytecompile8
   ( showOps8, string2bc8, bc2string8, bcWrite8, bcRead8, bc8, bytecompile8, runBC8 )
   where
 
@@ -16,7 +16,7 @@ import Data.Binary ( Word8, Binary(put, get), decode, encode )
 import Data.Binary.Put ( putWord8 )
 import Data.Binary.Get ( getWord8, isEmpty )
 import Data.Char
-import Bytecompile ( showOps, Bytecode, Module, openModule, ValBytecode(..), Env, Stack, dropDrops )
+import Bytecompile ( Bytecode, Module, openModule, ValBytecode(..), Env, Stack, dropDrops )
 
 
 newtype Bytecode8 = BC8 { un8 :: [Word8] }
@@ -64,7 +64,7 @@ showOps8 []         = []
 showOps8 (SHORT:xs) =
   let (n, xs') = getNumber (SHORT:xs)
   in ("SHORT " ++ show n) : showOps8 xs'
-showOps8 (INT:xs)   = 
+showOps8 (INT:xs)   =
   let (n, xs') = getNumber (INT:xs)
   in ("INT " ++ show n) : showOps8 xs'
 showOps8 (LONG:xs)  =
@@ -73,20 +73,23 @@ showOps8 (LONG:xs)  =
 showOps8 (NULL:xs)        = "NULL" : showOps8 xs
 showOps8 (RETURN:xs)      = "RETURN" : showOps8 xs
 showOps8 (ACCESS:i:xs)    = ("ACCESS " ++ show i) : showOps8 xs
-showOps8 (FUNCTION:i:xs)  = ("FUNCTION len=" ++ show i) : showOps8 xs
+showOps8 (FUNCTION:i:xs)  = ("FUNCTION len=" ++ show n) : showOps8 xs'
+  where (n, xs') = getNumber (i:xs)
 showOps8 (CALL:xs)        = "CALL" : showOps8 xs
 showOps8 (ADD:xs)         = "ADD" : showOps8 xs
 showOps8 (SUB:xs)         = "SUB" : showOps8 xs
 showOps8 (FIX:xs)         = "FIX" : showOps8 xs
 showOps8 (STOP:xs)        = "STOP" : showOps8 xs
-showOps8 (JUMP:i:xs)      = ("JUMP off=" ++ show i) : showOps8 xs
+showOps8 (JUMP:i:xs)      = ("JUMP off=" ++ show n) : showOps8 xs'
+  where (n, xs') = getNumber (i:xs)
 showOps8 (SHIFT:xs)       = "SHIFT" : showOps8 xs
 showOps8 (DROP:xs)        = "DROP" : showOps8 xs
 showOps8 (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
                            in ("PRINT " ++ show (bc2string8 msg)) : showOps8 rest
 showOps8 (PRINTN:xs)      = "PRINTN" : showOps8 xs
 showOps8 (ADD:xs)         = "ADD" : showOps8 xs
-showOps8 (CJUMP:i:xs)     = ("CJUMP off=" ++ show i) : showOps8 xs
+showOps8 (CJUMP:i:xs)     = ("CJUMP off=" ++ show n) : showOps8 xs'
+  where (n, xs') = getNumber (i:xs)
 showOps8 (TAILCALL:xs)    = "TAILCALL" : showOps8 xs
 showOps8 (x:xs)           = show x : showOps8 xs
 
@@ -112,61 +115,62 @@ bcRead8 filename = (map fromIntegral <$> un8) . decode <$> BS.readFile filename
 
 -- | Transforma un Term en Bytecode
 bc8 :: MonadFD4 m => TTerm -> m Bytecode
-bc8 t = do
-  t' <- bc8' t
-  return $ t' ++ [STOP]
-
-bc8' :: MonadFD4 m => TTerm -> m Bytecode
-bc8' term = case term of
+bc8 term = case term of
   (V _ (Bound i))                 -> return [ACCESS, i]
   (V _ (Free n))                  -> failFD4 "bc: Free"
   (Const _ (CNat i))              -> return (number2Bytecode i)
   (Lam _ _ _ (Sc1 t))             -> do
     t' <- tc8 t
-    return $ [FUNCTION, length t'] ++ t'
+    let n = number2Bytecode (length t')
+    return $ [FUNCTION] ++ n ++ t'
   (App _ t1 t2)                   -> do
-    t1' <- bc8' t1
-    t2' <- bc8' t2
+    t1' <- bc8 t1
+    t2' <- bc8 t2
     return $ t1' ++ t2' ++ [CALL]
   (Print _ s t)                   -> do
-    t' <- bc8' t
+    t' <- bc8 t
     return $ t' ++ [PRINT] ++ string2bc8 s ++ [NULL, PRINTN]
   (BinaryOp _ op t1 t2)           -> do
-    t1' <- bc8' t1
-    t2' <- bc8' t2
+    t1' <- bc8 t1
+    t2' <- bc8 t2
     case op of
       Add -> return $ t1' ++ t2' ++ [ADD]
       Sub -> return $ t1' ++ t2' ++ [SUB]
   (Fix _ _ _ _ _ (Sc2 t))         -> do
-    t' <- bc8' t
-    return $ [FUNCTION, length t' + 1] ++ t' ++ [RETURN, FIX]
+    t' <- bc8 t
+    let n = number2Bytecode (length t' + 1)
+    return $ [FUNCTION] ++ n ++ t' ++ [RETURN, FIX]
   (IfZ _ t1 t2 t3)                -> do
-    t1' <- bc8' t1
-    t2' <- bc8' t2
-    t3' <- bc8' t3
-    return $ t1' ++ [CJUMP, length t2' + 2] ++ t2' ++ [JUMP, length t3'] ++ t3'
+    t1' <- bc8 t1
+    t2' <- bc8 t2
+    t3' <- bc8 t3
+    let n2 = number2Bytecode (length t3')
+        n1 = number2Bytecode (length t2' + length n2 + 1)
+    return $ t1' ++ [CJUMP] ++ n1 ++ t2' ++ [JUMP] ++ n2 ++ t3'
   (Let _ n ty t1 (Sc1 t2))        -> do
-    t1' <- bc8' t1
-    t2' <- bc8' t2
+    t1' <- bc8 t1
+    t2' <- bc8 t2
     return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
 
 tc8 :: MonadFD4 m => TTerm -> m Bytecode
 tc8 term = case term of
   (App _ t1 t2) -> do
-    t1' <- bc8' t1
-    t2' <- bc8' t2
+    t1' <- bc8 t1
+    t2' <- bc8 t2
     return $ t1' ++ t2' ++ [TAILCALL]
   (IfZ _ t1 t2 t3) -> do
-    t1' <- bc8' t1
+    t1' <- bc8 t1
     t2' <- tc8 t2
     t3' <- tc8 t3
-    return $ t1' ++ [CJUMP, length t2' + 2] ++ t2' ++ [JUMP, length t3'] ++  t3'
+    let n2 = number2Bytecode (length t3')
+        n1 = number2Bytecode (length t2' + length n2 + 1)
+    return $ t1' ++ [CJUMP] ++ n1 ++ t2' ++ [JUMP] ++ n2 ++ t3'
   (Let _ n ty t1 (Sc1 t2)) -> do
-    t1' <- bc8' t1
+    t1' <- bc8 t1
     t2' <- tc8 t2
     return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
   _ -> do
-    term' <- bc8' term
+    term' <- bc8 term
     return $ term' ++ [RETURN]
 
 -- | Ejecuta un bytecode
@@ -178,19 +182,20 @@ runBC8' b env s = tick >> maxStack (length s) >> runBC8'' b env s
 
 runBC8'' :: MonadFD4 m => Bytecode -> Env -> Stack -> m ()
 runBC8'' (RETURN:_) _ (v:(RA e c):stack)        = runBC8' c e (v:stack)
-runBC8'' (SHORT:xs) env stack                   = 
+runBC8'' (SHORT:xs) env stack                   =
   let (i, xs') = getNumber (SHORT:xs)
   in runBC8' xs' env (I i:stack)
-runBC8'' (INT:xs) env stack                     = 
+runBC8'' (INT:xs) env stack                     =
   let (i, xs') = getNumber (INT:xs)
   in runBC8' xs' env (I i:stack)
-runBC8'' (LONG:xs) env stack                    = 
+runBC8'' (LONG:xs) env stack                    =
   let (i, xs') = getNumber (LONG:xs)
   in runBC8' xs' env (I i:stack)
 runBC8'' (ACCESS:i:xs) env stack                = runBC8' xs env (env!!i:stack)
-runBC8'' (FUNCTION:i:xs) env stack              = addClousure 1 >>
-  let drop' = drop i xs
-      take' = take i xs
+runBC8'' (FUNCTION:ty:xs) env stack             = addClousure 1 >> 
+  let (i, xs') = getNumber (ty:xs)
+      drop' = drop i xs'
+      take' = take i xs'
   in runBC8' drop' env (Fun env take':stack)
 runBC8'' (CALL:xs) env (v:(Fun ef cf):stack)    = addClousure 1 >> runBC8' cf (v:ef) (RA env xs:stack)
 runBC8'' (ADD:xs) env ((I i1):(I i2):stack)     = runBC8' xs env (I (i1 + i2):stack)
@@ -199,7 +204,9 @@ runBC8'' (FIX:xs) env ((Fun ef cf):stack)       = addClousure 2 >>
   let envFix = Fun envFix cf:env
   in runBC8' xs env (Fun envFix cf:stack)
 runBC8'' (STOP:xs) env (v:stack)                = return ()
-runBC8'' (JUMP:i:xs) env stack                  = runBC8' (drop i xs) env stack
+runBC8'' (JUMP:ty:xs) env stack                 =
+  let (i, xs') = getNumber (ty:xs)
+  in runBC8' (drop i xs') env stack
 runBC8'' (SHIFT:xs) env (v:stack)               = runBC8' xs (v:env) stack
 runBC8'' (DROP:xs) (v:env) stack                = runBC8' xs env stack
 runBC8'' (PRINT:xs) env stack                   =
@@ -210,24 +217,26 @@ runBC8'' (PRINT:xs) env stack                   =
 runBC8'' (PRINTN:xs) env s@(I i:stack)          =
   do printFD4 (show i)
      runBC8' xs env s
-runBC8'' (CJUMP:i:xs) env ((I c):stack)         =
+runBC8'' (CJUMP:ty:xs) env ((I c):stack)        = do
+  let (i, xs') = getNumber (ty:xs)
   case c of
-    0 -> runBC8' xs env stack
-    _ -> runBC8' (drop i xs) env stack
+    0 -> runBC8' xs' env stack
+    _ -> runBC8' (drop i xs') env stack
 runBC8'' (TAILCALL:xs) env (v:(Fun ef cf):stack) =
   runBC8' cf (v:ef) stack
+
 -- caso de fallo
 runBC8'' i env stack = do
-  printFD4 $ show (showOps i)
+  printFD4 $ show (showOps8 i)
   printFD4 $ show env
   printFD4 $ show stack
-  failFD4 "runBC': non-exhaustive patterns"
+  failFD4 "runBC8'': non-exhaustive patterns"
 
 -- | Bytecompile
 bytecompile8 :: MonadFD4 m => Module -> m Bytecode
 bytecompile8 m = do
-  bytecode <- bc8 $ openModule m
-  return $ (dropDrops bytecode ++ [STOP])
+  bytecode8 <- bc8 $ openModule m
+  return (dropDrops bytecode8 ++ [STOP])
 
 -- |
 getNumber :: Bytecode -> (Int, Bytecode)
@@ -239,7 +248,7 @@ getNumber (LONG:x1:x2:x3:x4:xs) = (x1 + x2 * 256 + x3 * 256^2 + x4 * 256^4, xs)
 --   INT   16bits
 --   LONG  32bits
 number2Bytecode :: Int -> Bytecode
-number2Bytecode n 
+number2Bytecode n
   | n < 256   = [SHORT, fromIntegral n]
   | n < 256^2 = [INT, fromIntegral (n `mod` 256), fromIntegral (n `div` 256)]
   | n < 256^4 = [LONG, fromIntegral (n `mod` 256), fromIntegral (n `div` 256 `mod` 256), fromIntegral (n `div` 256^2 `mod` 256), fromIntegral (n `div` 256^3)]

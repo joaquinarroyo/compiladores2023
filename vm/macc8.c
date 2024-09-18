@@ -127,7 +127,39 @@ static value get_index(env e, int i) {
 	if (i == 0) {
 		return e->v;
 	}
-	get_index(e->next, i-1);
+	return get_index(e->next, i-1);
+}
+
+/*
+ *
+ */
+int get_leng(uint8_t **c_ptr) {
+    uint8_t *c = *c_ptr;
+    uint32_t leng;
+    uint32_t ty = (int)(*c++);
+    
+    switch (ty) {
+        case SHORT: {
+            leng = (uint8_t)(*c++);
+            break;
+        }
+        case INT: {
+            leng = *((uint16_t*)c);
+            c += 2;
+            break;
+        }
+        case LONG: {
+            leng = *((uint32_t*)c);
+            c += 4;
+            break;
+        }
+        default:
+            quit("FATAL: tipo no reconocido en get_leng: %d", ty);
+            break;
+    }
+
+    *c_ptr = c;  // Actualiza el puntero original
+    return leng;
 }
 
 void run(code init_c)
@@ -183,8 +215,6 @@ void run(code init_c)
 
 			s = stack + offset;
 		}
-
-		
 
 		/* Tracing: sólo activado condicionalmente */
 		if (TRACE) {
@@ -314,7 +344,7 @@ void run(code init_c)
 			 * incluye la longitud del cuerpo del lambda en
 			 * el entero siguiente, así que lo consumimos.
 			 */
-			int leng = *c++;
+			uint32_t leng = get_leng(&c);
 
 			/* Ahora sí, armamos la clausura */
 			struct clo clo = {
@@ -380,16 +410,16 @@ void run(code init_c)
 		}
 
 		case JUMP: {
-			uint32_t i = *c++;
-			c += i;
+			uint32_t leng = get_leng(&c);
+			c += leng;
 			break;
 		}
 
 		case CJUMP: {
-			uint8_t i = *c++;
-			uint8_t con = (*--s).i;
+			uint32_t leng = get_leng(&c);
+			uint32_t con = (*--s).i;
 			if (con != 0) {
-				c += i;	
+				c += leng;	
 			}
 			break;
 		}

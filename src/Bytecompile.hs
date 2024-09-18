@@ -15,7 +15,7 @@
   una implementación de la Macchina para ejecutar el bytecode.
 -}
 module Bytecompile
-  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps, 
+  ( Bytecode, runBC, bcWrite, bcRead, showBC, bc, showOps,
     bytecompile, Module, openModule, ValBytecode(..), Env, Stack,
     dropDrops )
  where
@@ -132,12 +132,7 @@ bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
 
 -- | Transforma un Term en Bytecode
 bc :: MonadFD4 m => TTerm -> m Bytecode
-bc t = do
-  t' <- bc' t
-  return $ t'
-
-bc' :: MonadFD4 m => TTerm -> m Bytecode
-bc' term = case term of
+bc term = case term of
   (V _ (Bound i))                 -> return [ACCESS, i]
   (V _ (Free n))                  -> failFD4 "bc: Free"
   (Const _ (CNat i))              -> return [CONST, i]
@@ -145,48 +140,48 @@ bc' term = case term of
     t' <- tc t
     return $ [FUNCTION, length t'] ++ t'
   (App _ t1 t2)                   -> do
-    t1' <- bc' t1
-    t2' <- bc' t2
+    t1' <- bc t1
+    t2' <- bc t2
     return $ t1' ++ t2' ++ [CALL]
   (Print _ s t)                   -> do
-    t' <- bc' t
+    t' <- bc t
     return $ t' ++ [PRINT] ++ string2bc s ++ [NULL, PRINTN]
   (BinaryOp _ op t1 t2)           -> do
-    t1' <- bc' t1
-    t2' <- bc' t2
+    t1' <- bc t1
+    t2' <- bc t2
     case op of
       Add -> return $ t1' ++ t2' ++ [ADD]
       Sub -> return $ t1' ++ t2' ++ [SUB]
   (Fix _ _ _ _ _ (Sc2 t))         -> do
-    t' <- bc' t
+    t' <- bc t
     return $ [FUNCTION, length t' + 1] ++ t' ++ [RETURN, FIX]
   (IfZ _ t1 t2 t3)                -> do
-    t1' <- bc' t1
-    t2' <- bc' t2
-    t3' <- bc' t3
+    t1' <- bc t1
+    t2' <- bc t2
+    t3' <- bc t3
     return $ t1' ++ [CJUMP, length t2' + 2] ++ t2' ++ [JUMP, length t3'] ++ t3'
   (Let _ n ty t1 (Sc1 t2))        -> do
-    t1' <- bc' t1
-    t2' <- bc' t2
+    t1' <- bc t1
+    t2' <- bc t2
     return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
 
 tc :: MonadFD4 m => TTerm -> m Bytecode
 tc term = case term of
   (App _ t1 t2) -> do
-    t1' <- bc' t1
-    t2' <- bc' t2
+    t1' <- bc t1
+    t2' <- bc t2
     return $ t1' ++ t2' ++ [TAILCALL]
   (IfZ _ t1 t2 t3) -> do
-    t1' <- bc' t1
+    t1' <- bc t1
     t2' <- tc t2
     t3' <- tc t3
     return $ t1' ++ [CJUMP, length t2' + 2] ++ t2' ++ [JUMP, length t3'] ++ t3'
   (Let _ n ty t1 (Sc1 t2)) -> do
-    t1' <- bc' t1
+    t1' <- bc t1
     t2' <- tc t2
     return $ t1' ++ [SHIFT] ++ t2' ++ [DROP]
   _ -> do
-    term' <- bc' term
+    term' <- bc term
     return $ term' ++ [RETURN]
 
 -- | Bytecode Vals
@@ -247,7 +242,7 @@ runBC'' i env stack                             = do
   printFD4 $ show (showOps i)
   printFD4 $ show env
   printFD4 $ show stack
-  failFD4 "runBC': non-exhaustive patterns"
+  failFD4 "runBC'': non-exhaustive patterns"
 
 -- | Modulo
 type Module = [Decl TTerm]
@@ -256,7 +251,7 @@ type Module = [Decl TTerm]
 bytecompile :: MonadFD4 m => Module -> m Bytecode
 bytecompile m = do
   bytecode <- bc $ openModule m
-  return $ (dropDrops bytecode ++ [STOP])
+  return (dropDrops bytecode ++ [STOP])
 
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
 openModule :: Module -> TTerm
