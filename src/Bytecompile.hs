@@ -251,7 +251,7 @@ type Module = [Decl TTerm]
 bytecompile :: MonadFD4 m => Module -> m Bytecode
 bytecompile m = do
   bytecode <- bc $ openModule m
-  return (dropDrops bytecode ++ [STOP])
+  return $ dropDrops (bytecode ++ [STOP])
 
 -- | Traduce una lista de declaraciones en una unica expresion "let in"
 openModule :: Module -> TTerm

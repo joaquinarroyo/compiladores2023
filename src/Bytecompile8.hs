@@ -236,7 +236,7 @@ runBC8'' i env stack = do
 bytecompile8 :: MonadFD4 m => Module -> m Bytecode
 bytecompile8 m = do
   bytecode8 <- bc8 $ openModule m
-  return (dropDrops bytecode8 ++ [STOP])
+  return $ dropDrops (bytecode8 ++ [STOP])
 
 -- |
 getNumber :: Bytecode -> (Int, Bytecode)
